@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# TTS credentials (never commit)
+volc_tts.json
+fish_tts.json
+*.creds.json
+
+# Generated media / scratch
+*.mp4
+*.webm
+*.mp3
+*.png
+!**/templates/**
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -117,11 +117,6 @@ Example:
 5. `say` is what's HEARD; the on-screen text is the emphasis, not a transcript — keep
    them aligned but the slide shows the punch, the voice carries the sentence.
 
-## Identity gate (HARD)
-
-Never put 学校 / 城市 / 年级 / 职位 in the video or narration. Self-label "技术博主" /
-"AI工具玩家". De-identify any personal experience. Full self-check before building.
-
 ## Publishing 抖音
 
 Publish via the **content-publishing** skill on the logged-in browser session:

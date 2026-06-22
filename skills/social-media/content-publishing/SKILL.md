@@ -47,7 +47,6 @@ There is exactly **one** upload path per platform: the logged-in browser session
   accounts share one logged-in profile).
 - The content file(s) exist (e.g. `/root/hermes-content/<platform>/...`). Make
   videos with the **douyin-shortform** skill first.
-- The **identity gate** (below) has passed on the content.
 
 ## How to Run
 
@@ -103,11 +102,6 @@ The loop for every platform:
 >   NOT re-scan QR "because the file can't reach the browser." It already can.
 
 ## Procedure
-
-### Identity gate (run first, every time)
-Scan the content for identity leaks (school, city, grade, employer) before
-typing/uploading. Never publish 学校名/城市/年级/职位. See the identity rules in
-**social-media-automation**. Fix the content file first — never "publish and fix later."
 
 ### 抖音 (video)
 1. `browser_navigate` → `https://creator.douyin.com/creator-micro/content/upload`.

@@ -1,6 +1,6 @@
 ---
 name: social-media-automation
-description: Content strategy + identity rules for 小红书/知乎/抖音.
+description: Content strategy for 小红书/知乎/抖音.
 version: 3.0.0
 platforms: [windows, linux, macos]
 metadata:
@@ -12,10 +12,9 @@ metadata:
 # Social Media Content Strategy
 
 How to plan and write good content for 小红书 (Xiaohongshu), 知乎 (Zhihu), and
-抖音 (Douyin), and the identity rules that apply to everything published. This
-skill is about WHAT to make. For HOW to publish (the one canonical upload path +
-verify-before-claim), use **content-publishing**. For HOW to make a good video,
-use **douyin-shortform**.
+抖音 (Douyin). This skill is about WHAT to make. For HOW to publish (the one
+canonical upload path + verify-before-claim), use **content-publishing**. For HOW
+to make a good video, use **douyin-shortform**.
 
 ## When to Use
 
@@ -26,10 +25,9 @@ or checking it before it goes out.
 
 1. **One insight per post.** Don't write overviews. Find one interesting angle and go deep.
 2. **Data + opinion.** Every post needs a concrete number, a specific tool name, or a real observation. No vague "AI is changing everything."
-3. **No identity leaks.** Never mention school, city, grade, or employer. Use "a project I worked on" not a named university. Check every post before publishing.
-4. **Read the room.** Before writing, browse the platform for 2 minutes to see what's trending and how top posts are structured *today*. Don't follow a fixed template — platforms change.
-5. **No filler.** If a post can be cut by 30% without losing value, cut it.
-6. **De-slop the copy.** Run every script / note / answer through the **humanizer** skill before publishing — strip emoji-bullets, rule-of-three, em-dashes, and hype.
+3. **Read the room.** Before writing, browse the platform for 2 minutes to see what's trending and how top posts are structured *today*. Don't follow a fixed template — platforms change.
+4. **No filler.** If a post can be cut by 30% without losing value, cut it.
+5. **De-slop the copy.** Run every script / note / answer through the **humanizer** skill before publishing — strip emoji-bullets, rule-of-three, em-dashes, and hype.
 
 ## Content Guidelines
 
@@ -60,21 +58,6 @@ or checking it before it goes out.
   spam the messaging channel with a message per step — it rate-limits and images
   stop arriving.
 
-## Identity Gate (hard rule — runs before publishing)
-
-Identity protection is non-negotiable. After writing ANY content file, and again
-before loading it to publish, grep for leaks:
-
-```bash
-grep -n -iE "本科|大[一二三四]|研[一二三]|博士|在读|学校|校园|campus|class of|我在.*读|清华|北大|浙大|复旦|stanford|mit|cmu|berkeley" \
-  /root/hermes-content/知乎/*.md /root/hermes-content/小红书/*.md /root/hermes-content/douyin/*.md
-```
-
-The school list is representative — extend it with whatever would identify the
-account owner. Also check hashtags. If anything is found, remove it from the
-content file BEFORE publishing — never "publish and fix later." Self-describe as
-"技术博主" / "AI工具玩家", never a named school/city/grade/employer.
-
 ## Publishing
 
 Do NOT improvise a publishing flow here. Hand off to the **content-publishing**
@@ -99,7 +82,6 @@ Verify-before-claim: never say 已发布 without a permalink/DOM/screenshot proo
 
 - Never report 已发布 from "I clicked the button." Evidence first (see content-publishing).
 - Don't reinvent the upload path or re-scan QR when a session is already logged in.
-- Identity leaks are the most common hard error — run the grep gate every time.
 - **抖音 upload**: `browser_upload(file_paths=[...], selector="input[type=file]")`
   (the hidden input takes the file directly). Only if the page truly does not
   advance, retry with `drop=true`. NO QR, NO sandbox.

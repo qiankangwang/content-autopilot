@@ -1,8 +1,8 @@
-# hermes-content-skills
+# auto-content-skills
 
 A small, opinionated **skill pack for the [Hermes agent](https://github.com/NousResearch/hermes-agent)** that turns it into a hands-off content bot for the three big Chinese platforms — **小红书 (Xiaohongshu), 知乎 (Zhihu), and 抖音 (Douyin)**.
 
-It bundles the whole loop an autonomous run actually needs: *what to make* (strategy + identity rules), *how to make it* (a one-command rich-motion-graphics video builder + a 小红书 card generator), and *how to ship it* (one canonical upload path per platform, with a strict **verify-before-claim** honesty gate so the agent never reports a post as live without proof).
+It bundles the whole loop an autonomous run actually needs: *what to make* (per-platform content strategy), *how to make it* (a one-command rich-motion-graphics video builder + a 小红书 card generator), and *how to ship it* (one canonical upload path per platform, with a strict **verify-before-claim** honesty gate so the agent never reports a post as live without proof).
 
 > **Status:** these are Hermes agent skills, not a standalone CLI. They assume the
 > agent's `browser_*` tools (a persistent, logged-in browser session) and a
@@ -13,7 +13,7 @@ It bundles the whole loop an autonomous run actually needs: *what to make* (stra
 
 | Skill | Job | Key pieces |
 |-------|-----|-----------|
-| **`social-media/social-media-automation`** | Strategy — *what* to make + the identity gate that runs before anything is published | per-platform content guidelines, identity-leak grep gate, cron prompt template |
+| **`social-media/social-media-automation`** | Strategy — *what* to make, per platform | per-platform content guidelines, cron prompt template |
 | **`social-media/content-publishing`** | Publishing — the *one* canonical upload path per platform + verify-before-claim | `browser_upload` modes, `browser_xhs_publish` / `browser_douyin_publish`, evidence gate |
 | **`creative/douyin-shortform`** | Video — human-quality vertical short videos | `make_rich_video.py`, `make_xhs_cards.py`, `volc_tts.py`, `fish_tts.py` |
 
@@ -21,7 +21,7 @@ It bundles the whole loop an autonomous run actually needs: *what to make* (stra
 
 ```
                  social-media-automation
-                 (pick angle, write copy, identity gate)
+                 (pick angle, write copy)
                             │
               ┌─────────────┴──────────────┐
               ▼                             ▼
@@ -46,9 +46,6 @@ It bundles the whole loop an autonomous run actually needs: *what to make* (stra
 - **One canonical path, no flailing.** Exactly one upload method per platform. The
   skills explicitly rule out the dead ends (fresh sandbox Playwright, QR re-scans on
   an already-logged-in session, the `xhs` library / API-sign hacks).
-- **Identity gate is non-negotiable.** Every content file is grepped for school /
-  city / grade / employer leaks before it goes out. Self-label "技术博主", never a
-  named institution.
 - **Make it look human.** No flat text-on-gradient slides read by a robotic TTS.
   Videos are kinetic "keynote" motion graphics (code cards, big stats, before/after,
   bullets) voiced by a natural neural voice and auto-synced to it.
@@ -85,8 +82,8 @@ skills/
 Drop the skills into your Hermes skills directory (it walks the tree recursively):
 
 ```bash
-git clone https://github.com/qiankangwang/hermes-content-skills.git
-cp -r hermes-content-skills/skills/* ~/.hermes/skills/
+git clone https://github.com/qiankangwang/auto-content-skills.git
+cp -r auto-content-skills/skills/* ~/.hermes/skills/
 # (or point HERMES_SKILLS_DIR at the cloned skills/ folder)
 ```
 

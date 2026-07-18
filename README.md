@@ -251,6 +251,30 @@ python skills/creative/douyin-shortform/scripts/make_xhs_cards.py \
 See the `douyin-shortform` SKILL.md for the full `spec.json` schema and scene types
 (including `media` scenes with data overlays and step-by-step `diagram` scenes).
 
+## Disclaimer · 免责声明
+
+This project is an automation **reference for personal/experimental use**. If you
+run it, you are the operator and you own the consequences:
+
+- **Platform terms.** Automated posting and browser automation may conflict with
+  the user agreements of 抖音 / 小红书 / 知乎. Accounts can be rate-limited,
+  restricted, or banned. Use a burner/secondary account if unsure; the authors
+  and contributors accept no liability for account or business losses.
+  自动化发布可能违反平台用户协议,账号可能被限流、限权或封禁,后果由使用者自行承担。
+- **AI-content labeling.** Chinese regulation (《人工智能生成合成内容标识办法》,
+  effective 2025-09-01) requires AI-generated content to be labeled. The publish
+  flow keeps 抖音's AI 声明 enabled — do **not** disable it, and follow whatever
+  labeling rules apply in your jurisdiction.
+  发布流程默认勾选平台的 AI 生成声明,请勿关闭。
+- **Content responsibility.** You are responsible for what you publish: factual
+  accuracy, no misleading claims, and the rights to any material the pipeline
+  ingests (B-roll footage, screenshots, music you place in `assets/bgm/`, fonts).
+  `fetch_web_clip.py` is for short quotes of official/public footage — respect
+  copyright and each source's terms.
+  发布内容的真实性、版权(素材/音乐/字体/引用片段)由使用者自行负责。
+- **No warranty.** Provided *as is* under the MIT license, without warranty of
+  any kind. Nothing here is legal advice.
+
 ## License
 
 [MIT](LICENSE).

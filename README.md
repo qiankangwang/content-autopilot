@@ -62,7 +62,7 @@ skills/
     social-media-automation/
       SKILL.md
       references/
-        content-examples.md       # post patterns per platform
+        content-examples.md        # post patterns per platform
         cron-prompt-template.md    # self-contained daily-content cron prompt
         zhihu-publishing.md        # 知乎-specific notes
     content-publishing/

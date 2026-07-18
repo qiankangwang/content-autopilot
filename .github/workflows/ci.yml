@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  py-compile:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Byte-compile all Python scripts
+        run: |
+          python -c "import pathlib, py_compile, sys; files = sorted(pathlib.Path('.').rglob('*.py')); [py_compile.compile(str(p), doraise=True) for p in files]; print('compiled %d files OK' % len(files))"

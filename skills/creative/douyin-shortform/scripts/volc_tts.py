@@ -66,7 +66,8 @@ def main():
                      "/root/.config/volc_tts.json"):
             if cand and os.path.exists(cand):
                 try:
-                    c = json.load(open(cand, encoding="utf-8"))
+                    with open(cand, encoding="utf-8") as f:
+                        c = json.load(f)
                 except (OSError, ValueError):
                     continue
                 appid = appid or str(c.get("appid", "")).strip()
@@ -80,7 +81,8 @@ def main():
 
     text = args.text
     if args.text_file:
-        text = open(args.text_file, encoding="utf-8").read().strip()
+        with open(args.text_file, encoding="utf-8") as f:
+            text = f.read().strip()
     if not text:
         sys.stderr.write("No --text / --text-file.\n")
         raise SystemExit(2)

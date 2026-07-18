@@ -216,7 +216,8 @@ def main():
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--seed", help="Override the per-topic style seed (else derived from title)")
     args = ap.parse_args()
-    spec = json.load(open(args.spec, encoding="utf-8"))
+    with open(args.spec, encoding="utf-8") as f:
+        spec = json.load(f)
     os.makedirs(args.outdir, exist_ok=True)
 
     # Deterministic-but-varied styling: seed from --seed, else title + the dated outdir

@@ -476,7 +476,8 @@ def main():
     ap.add_argument("--no-audio", action="store_true", help="render silent (debug)")
     args = ap.parse_args()
 
-    spec = json.load(open(args.spec, encoding="utf-8"))
+    with open(args.spec, encoding="utf-8") as f:
+        spec = json.load(f)
     scenes = spec.get("scenes", [])
     if not scenes:
         print("ERROR: spec has no scenes", file=sys.stderr)

@@ -1,6 +1,6 @@
 ---
 name: social-media-automation
-description: Content strategy for 小红书/知乎/抖音.
+description: Content strategy + identity rules for 小红书/知乎/抖音.
 version: 3.0.0
 platforms: [windows, linux, macos]
 metadata:
@@ -12,9 +12,10 @@ metadata:
 # Social Media Content Strategy
 
 How to plan and write good content for 小红书 (Xiaohongshu), 知乎 (Zhihu), and
-抖音 (Douyin). This skill is about WHAT to make. For HOW to publish (the one
-canonical upload path + verify-before-claim), use **content-publishing**. For HOW
-to make a good video, use **douyin-shortform**.
+抖音 (Douyin), and the identity rules that apply to everything published. This
+skill is about WHAT to make. For HOW to publish (the one canonical upload path +
+verify-before-claim), use **content-publishing**. For HOW to make a good video,
+use **douyin-shortform**.
 
 ## When to Use
 
@@ -25,9 +26,10 @@ or checking it before it goes out.
 
 1. **One insight per post.** Don't write overviews. Find one interesting angle and go deep.
 2. **Data + opinion.** Every post needs a concrete number, a specific tool name, or a real observation. No vague "AI is changing everything."
-3. **Read the room.** Before writing, browse the platform for 2 minutes to see what's trending and how top posts are structured *today*. Don't follow a fixed template — platforms change.
-4. **No filler.** If a post can be cut by 30% without losing value, cut it.
-5. **De-slop the copy.** Run every script / note / answer through the **humanizer** skill before publishing — strip emoji-bullets, rule-of-three, em-dashes, and hype.
+3. **No identity leaks.** Never mention school, city, grade, or employer. Use "a project I worked on" not a named university. Check every post before publishing.
+4. **Read the room.** Before writing, browse the platform for 2 minutes to see what's trending and how top posts are structured *today*. Don't follow a fixed template — platforms change.
+5. **No filler.** If a post can be cut by 30% without losing value, cut it.
+6. **De-slop the copy.** Run every script / note / answer through the **humanizer** skill before publishing — strip emoji-bullets, rule-of-three, em-dashes, and hype.
 
 ## Content Guidelines
 
@@ -48,8 +50,8 @@ or checking it before it goes out.
 - CTA in the last 5 seconds: "评论区说说你…" not "扣1私你工具名" (spammy).
 - **Quality bar:** never ship text-on-gradient slides with a robotic TTS voice
   (reads as low-effort and obviously AI-made). Use the **douyin-shortform** skill:
-  natural voice + real visuals (generated keyframes / screen-recording style /
-  motion) + word-level captions, 1080×1920, 30fps.
+  natural voice + real visuals (real footage / page recordings / screenshots /
+  animated diagrams / motion cards) + word-level captions, 1080×1920, 30fps.
 - **Scrap-and-rebuild signals**: "不像真人", "视频没看到" (MEDIA attachment failed),
   "这个视频不好" — any of these means scrap the current video and rebuild with
   the douyin-shortform skill. Do NOT attempt minor edits on a rejected video.
@@ -58,15 +60,30 @@ or checking it before it goes out.
   spam the messaging channel with a message per step — it rate-limits and images
   stop arriving.
 
+## Identity Gate (hard rule — runs before publishing)
+
+Identity protection is non-negotiable. After writing ANY content file, and again
+before loading it to publish, grep for leaks — fill in your own school/city/etc.
+(English and native-language spellings) once and keep the list in the prompt:
+
+```bash
+grep -n -iE "<your-school-en>|<your-school-cn>|<your-city>|本科|大[一二三四]|研[一二三]|博士|在读|学校|校园|campus|class of|我在.*读" \
+  /root/hermes-content/知乎/*.md /root/hermes-content/小红书/*.md /root/hermes-content/douyin/*.md
+```
+
+Also check hashtags (`#<YourSchool>`, `#<YourCity>`, …). If anything is found,
+remove it from the content file BEFORE publishing — never "publish and fix later."
+Self-describe as "技术博主" / "AI工具玩家", never a named school/city/grade/employer.
+
 ## Publishing
 
 Do NOT improvise a publishing flow here. Hand off to the **content-publishing**
 skill — the ONE canonical path is the logged-in browser session + the
 `browser_upload` tool (no QR, no sandbox Playwright, no xhs library). Per platform:
-- **抖音 video** → build with `douyin-shortform` (`make_rich_video.py`), then publish
-  via `content-publishing` (browser_upload → browser_douyin_publish → verify). If
-  抖音 demands SMS on 发布, report 未确认发布:需短信验证 + screenshot, never fake.
-  Watch for 风控 logout.
+- **抖音 video** → full-auto: build with `douyin-shortform` (`make_rich_video.py`),
+  then auto-publish via `content-publishing` (browser_upload → browser_douyin_publish
+  → verify). If 抖音 demands SMS on 发布, report 未确认发布:需短信验证 + screenshot,
+  never fake. Watch for 风控 logout.
 - **小红书 图文** → `browser_upload(file_paths=[...], drop=true)` — drag-drop only; a
   normal upload returns success but silently leaves the editor empty.
 - **知乎** → no upload (text editor only).
@@ -82,6 +99,7 @@ Verify-before-claim: never say 已发布 without a permalink/DOM/screenshot proo
 
 - Never report 已发布 from "I clicked the button." Evidence first (see content-publishing).
 - Don't reinvent the upload path or re-scan QR when a session is already logged in.
+- Identity leaks are the most common hard error — run the grep gate every time.
 - **抖音 upload**: `browser_upload(file_paths=[...], selector="input[type=file]")`
   (the hidden input takes the file directly). Only if the page truly does not
   advance, retry with `drop=true`. NO QR, NO sandbox.
@@ -90,6 +108,6 @@ Verify-before-claim: never say 已发布 without a permalink/DOM/screenshot proo
   stays EMPTY), so always `browser_upload(..., drop=true)` for 小红书 images. 抖音
   videos use `selector="input[type=file]"` (NOT drop).
 - **抖音 video quality**: build with the **douyin-shortform** skill —
-  `make_rich_video.py` (rich motion graphics: code cards / stats / compares /
-  bullets + a natural 豆包 **vivi** voice, auto-synced). Never edge-tts, never
-  Kokoro, never gradient slides, never AI-photo Ken Burns.
+  `make_rich_video.py` (rotating style engine: real footage / diagrams / code
+  cards / stats / compares + a natural 豆包 voice, auto-synced). Never edge-tts,
+  never Kokoro, never gradient slides, never AI-photo Ken Burns.

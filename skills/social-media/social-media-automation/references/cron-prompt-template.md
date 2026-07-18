@@ -45,6 +45,7 @@ Paste this into `hermes cron create "0 9 * * *" --prompt "..."` (replace bracket
 - 抖音视频：browser_upload(file_paths=[make_rich_video.py 输出的那个确切路径], selector="input[type=file]")
 - 小红书图文：切到「上传图文」tab → browser_upload(file_paths=[封面+配图], drop=true)（必须 drop=true）
 - 知乎：纯文字，无需上传
+- 身份门：发布前全文自查，绝不出现 学校/城市/年级/职位
 - 发完必须用 URL/DOM/截图确认上线，拿到证据才说「已发布」，否则报「未确认发布」
 
 ## 最后输出

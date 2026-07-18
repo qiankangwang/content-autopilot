@@ -68,33 +68,33 @@ The loop for every platform:
 | `browser_upload` | Set file(s) on a `<input type=file>` (video/cover) |
 | `browser_type` | Title / description / answer body |
 | `browser_click` | Click 发布 / 创作 / 提交 |
-| `browser_xhs_publish` | Click 小红书's closed-shadow 发布 button server-side |
-| `browser_douyin_publish` | Click 抖音's 发布 button + verify the jump |
 | `browser_console` (expression=) | Read `location.href` / DOM to VERIFY publish |
 | `browser_vision` | Screenshot proof of the published state |
 
-**`browser_upload` usage — PICK THE MODE BY PLATFORM:**
+**`browser_upload` usage — PICK THE MODE BY PLATFORM (this is where past attempts went wrong):**
 - Args: `file_paths=[...]`, plus a target: `selector`/`ref` (the `<input type=file>`),
   `click_ref`/`click_selector` (a visible button → native chooser), or `drop=true`.
-- **🎵 抖音 video → `browser_upload(file_paths=["<the mp4>"], selector="input[type=file]")`.**
-  `setInputFiles` works on the hidden input — no QR, no native dialog. If the editor
-  (作品描述/发布) doesn't appear within ~10s, retry with `drop=true` (drag-drop, the
-  reliable fallback — same as 小红书).
+- **🎵 抖音 video → `browser_upload(file_paths=["<the mp4>"], selector="input[type=file]", verify_text=["上传中","转码中","重新上传"])`.**
+  `setInputFiles` works on the hidden input — no QR, no native dialog. The
+  `verify_text` markers make the tool CONFIRM the SPA accepted the file and return
+  `bound:true/false` — **trust that flag**: `bound:false` → re-navigate to a fresh
+  upload page and retry ONCE with `drop=true` (same `verify_text`); still false →
+  report 「上传未绑定」 honestly.
 - **⛔ 📕 小红书 图文 (image notes) → `browser_upload(file_paths=[...], drop=true)` —
   MANDATORY; the normal mode SILENTLY FAILS.** 小红书's uploader only reacts to a
   drag-drop `DataTransfer` and IGNORES `input.files`/`setInputFiles`, so a plain
   `selector` upload returns `success:true` but the editor stays EMPTY. `drop=true`
-  opens the 图片编辑 editor with the image. NEVER use plain `selector` for 小红书
-  images; NEVER use `drop=true` for 抖音 video.
+  opens the 图片编辑 editor with the image (verified). NEVER use plain `selector`
+  for 小红书 images; NEVER use `drop=true` for 抖音 video.
 - Fallback (抖音 only, if a direct selector truly fails): `click_selector`/`click_ref`
   of the visible upload button (filechooser path).
 - The error message tells you how to fix it (it lists the files that actually exist
   + what to do). Read it and adjust — do NOT conclude the tool is broken.
 
-> 🧠 **How file upload works (container/host).** `browser_upload` ships the file's
-> BYTES (base64) to the browser server, which writes them next to the browser and
-> does `setInputFiles` there — **no host path is ever sent to the browser/CDP**, so
-> a file inside a container uploads fine.
+> 🧠 **How file upload works (container/host — already solved, do not re-derive).**
+> `browser_upload` ships the file's BYTES (base64) to the browser server, which
+> writes them next to the browser and does `setInputFiles` there — **no host path
+> is ever sent to the browser/CDP**, so a file inside a container uploads fine.
 > - **Pass the CONTAINER path** (e.g. `/root/hermes-content/douyin/x.mp4`). It is
 >   auto-translated to the real host file. Do NOT invent a host path that does not
 >   exist — that is the classic cause of "upload failed."
@@ -106,18 +106,39 @@ The loop for every platform:
 ### 抖音 (video)
 1. `browser_navigate` → `https://creator.douyin.com/creator-micro/content/upload`.
 2. `browser_snapshot`.
-3. `browser_upload(file_paths=["/root/hermes-content/douyin/<video>.mp4"], selector="input[type=file]")`.
-   If the editor (作品描述 / 发布) does NOT appear within ~10s, retry with `drop=true`.
-4. Wait for the upload to process (re-`browser_snapshot` until the 作品描述 / 发布
-   form appears).
-5. `browser_type` the description (+ hashtags); set a cover if offered.
-6. `browser_douyin_publish()` (clicks 发布 + verifies the jump to content-manage).
-7. **抖音 may then demand an SMS code** (anti-bot). This needs the account owner's
-   phone — you canNOT bypass it. Report 「未确认发布:抖音要求短信验证,需用户提供验证码」
-   + screenshot. Do NOT loop or fake success.
-8. Verify (below).
+3. **Upload WITH binding verification** (a mechanically-ok injection is NOT proof —
+   抖音's uploader sometimes ignores it entirely):
+   `browser_upload(file_paths=["/root/hermes-content/douyin/<video>.mp4"], selector="input[type=file]", verify_text=["上传中","转码中","重新上传"])`.
+   The result carries **`bound:true/false`**:
+   - `bound:true` → the video registered; continue.
+   - `bound:false` → the file did NOT enter the form. **Do NOT fill the form.**
+     Re-`browser_navigate` to a fresh upload page and retry ONCE (last resort
+     `drop=true`, same `verify_text`). Still `bound:false` → report 「上传未绑定」
+     honestly and stop.
+   ⚠️ The 作品描述/发布 form rendering alone is NOT proof the video bound — 抖音 renders
+   that chrome even with an empty form (this caused the old draft-only failures).
+4. **Wait for the upload to FINISH** — re-`browser_snapshot` until there is no
+   上传中/转码中/百分比 progress and the 发布 button is enabled.
+5. `browser_type` the title and description (+ hashtags); set a cover if offered
+   (the pipeline exports a designed `<video>.cover.jpg` next to the mp4 — 封面 input
+   only accepts jpg/png).
+6. **Publish with `browser_douyin_publish(title="<the exact title you typed>")`** — NOT
+   a bare `browser_click` 发布. It waits for upload/transcode AND the content pre-check
+   (auto-clicking 重新检测, retrying 发布 through 「检测人数过多」 busy toasts),
+   trusted-clicks 发布, then CONFIRMS the post is actually listed in 作品管理 (a 发布成功
+   toast / the editor URL renaming is NOT proof). It returns one of:
+   - `published:true` → confirmed live in 作品管理 (审核中 counts) → report 已发布.
+   - `needsVerify:true` → an SMS/captcha 风控 wall: report 「未确认发布:抖音需短信验证,
+     需用户处理」 + screenshot. Do NOT loop or fake success.
+   - `reason:"detection_busy"` → 抖音's content pre-check is overloaded; the draft is
+     safe on the page. Run `sleep 420` in the terminal, then call
+     `browser_douyin_publish` ONCE more. Still busy → report 「未确认发布:检测过载,
+     草稿已存」 and stop. **Max 2 publish calls total — never loop beyond that.**
+   - other `unconfirmed:true` → clicked but NOT in 作品管理 → report 「未确认发布」,
+     never 已发布.
+7. Verify (below): for 抖音 the ONLY proof is the post showing in 作品管理.
 
-### 小红书 (image note 图文)
+### 小红书 (image note 图文) — verified end-to-end working
 0. **Build quality cards FIRST (do NOT post a bare AI image — 小红书 is cover-driven).**
    Write a spec JSON `{title, subtitle, tag, cards:[{heading,body},...], bg?}` (content
    per **social-media-automation**: one insight, specific, human) and run the locked
@@ -134,7 +155,8 @@ The loop for every platform:
 4. `browser_type` the title (≤20 chars) and body; add 3-5 topic tags.
 5. **发布 — call `browser_xhs_publish()`. One tool, NO coordinates.** 小红书's 发布
    button is a closed-shadow `<xhs-publish-btn>` whose clickable red pill is
-   RIGHT-anchored, so computing its center and clicking it MISSES. `browser_xhs_publish`
+   RIGHT-anchored, so computing its center and clicking it MISSES (the old
+   "clicked 发布 but nothing happened / looped 5×" bug). `browser_xhs_publish`
    locates + clicks the pill server-side and confirms `/publish/success`; it returns
    `{published: true|false}`.
    - `published: true` → go verify (step 6).
@@ -165,6 +187,14 @@ Have URL-change OR DOM-confirmation, AND a screenshot → report 已发布 with 
 permalink. **No evidence → report 「未确认发布」 with the screenshot — never claim
 已发布.** A fabricated success is a hard failure. This is a publishing instance
 of **verification-before-completion**: evidence before done.
+
+> ⛔ **抖音 — 作品管理 is the ONLY authority.** A 发布成功 toast, a satisfaction-survey
+> popup, or the editor URL changing (`/content/upload` → `/content/publish?…`) are NOT
+> proof — 抖音 renames its own URL, which previously caused FALSE 已发布 reports.
+> `browser_douyin_publish`'s `published:true` already means the server SAW the post in
+> 作品管理. If you ever click 发布 any other way, you MUST re-load 作品管理 and confirm the
+> new dated/titled item appears in 已发布 or 审核中 — if it is not there, report
+> 未确认发布 even when the page said 发布成功.
 
 ### Idempotency / Resume
 Before publishing, check the creator content list / drafts. If the same dated

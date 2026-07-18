@@ -1,21 +1,69 @@
-# auto-content-skills
+# content-autopilot
 
-A small, opinionated **skill pack for the [Hermes agent](https://github.com/NousResearch/hermes-agent)** that turns it into a hands-off content bot for the three big Chinese platforms — **小红书 (Xiaohongshu), 知乎 (Zhihu), and 抖音 (Douyin)**.
+A small, opinionated **skill pack for the [Hermes agent](https://github.com/NousResearch/hermes-agent)** that turns it into a hands-off **抖音 (Douyin) video bot** — from topic to a finished, human-looking vertical short video to a *verified* publish — with 小红书 (Xiaohongshu) cards and 知乎 (Zhihu) answers included as secondary channels.
 
-It bundles the whole loop an autonomous run actually needs: *what to make* (per-platform content strategy), *how to make it* (a one-command rich-motion-graphics video builder + a 小红书 card generator), and *how to ship it* (one canonical upload path per platform, with a strict **verify-before-claim** honesty gate so the agent never reports a post as live without proof).
+The core loop is Douyin-first: *make* the video with a one-command rich-motion-graphics builder (rotating visual styles, natural neural voice, background music, real B-roll), then *ship* it through one canonical, fully-automated publish path with a strict **verify-before-claim** honesty gate — the agent never reports a post as live unless it actually shows up in 作品管理.
 
 > **Status:** these are Hermes agent skills, not a standalone CLI. They assume the
 > agent's `browser_*` tools (a persistent, logged-in browser session) and a
 > terminal/container backend. The Python scripts under `douyin-shortform/scripts`
 > run on their own and are useful anywhere.
 
-## The three skills
+## The Douyin pipeline
 
-| Skill | Job | Key pieces |
-|-------|-----|-----------|
-| **`social-media/social-media-automation`** | Strategy — *what* to make, per platform | per-platform content guidelines, identity-leak self-check, cron prompt template |
-| **`social-media/content-publishing`** | Publishing — the *one* canonical upload path per platform + verify-before-claim | `browser_upload` modes (upload binding via `verify_text`/`bound`), `browser_xhs_publish` / `browser_douyin_publish` publish contract, evidence gate |
-| **`creative/douyin-shortform`** | Video — human-quality vertical short videos | `make_rich_video.py` + the `richlib/` style engine, B-roll helpers, `make_xhs_cards.py`, TTS scripts |
+### 1. Make the video — `creative/douyin-shortform`
+
+One command turns a `spec.json` into a finished 1080×1920 H.264/AAC mp4:
+
+```bash
+python skills/creative/douyin-shortform/scripts/make_rich_video.py \
+  --spec spec.json --out out.mp4
+```
+
+- **Rotating style engine (`richlib/`).** Each render picks one of five visual
+  languages (editorial 杂志 / notebook 手写 / terminal 终端 / tabloid 快报 /
+  keynote 聚光) by topic affinity + anti-repeat, then randomizes palette and
+  layout within it — consecutive videos rarely share a look. You write content;
+  the engine dresses it.
+- **Real material, not AI wallpaper.** `media` scenes (page-scroll recordings,
+  web video clips, screenshots — with data overlays) and step-by-step `diagram`
+  scenes mix with kinetic text cards. B-roll helpers included:
+  `record_page_clip.py` (scrolling page capture → webm) and `fetch_web_clip.py`
+  (yt-dlp download + cut of official footage). `gen_scene_image.py` is the
+  flat-illustration fallback when no real material exists.
+- **Natural voice + BGM.** Narration is voiced by a natural neural voice
+  (火山/豆包 TTS via `volc_tts.py`, with per-scene emotion tags; Fish Audio
+  character voices via `fish_tts.py` optional), and low-volume background music
+  is auto-rotated by content mood and ducked under the speech.
+- **The engine enforces quality.** It refuses to render specs with duplicated
+  narration, text-card stuffing, or too little real material, and runs an
+  optional vision check that rejects login walls / webpage junk / irrelevant
+  media — printing a per-scene repair work order instead of shipping a bad video.
+
+See the `douyin-shortform` SKILL.md for the full `spec.json` schema and scene types.
+
+### 2. Ship it — `social-media/content-publishing`
+
+One canonical upload path, fully automated, no human in the loop unless 风控
+demands one:
+
+- **Upload with binding verification.** `browser_upload` sets the file on 抖音's
+  hidden `<input type=file>` in the already-logged-in session and confirms via
+  `verify_text` markers that the SPA actually accepted it, returning
+  `bound:true/false` — a rendered publish form alone is *not* proof the video
+  bound (that caused the old draft-only failures).
+- **Publish with `browser_douyin_publish`, not a bare click.** It waits out
+  upload/transcode and the content pre-check (auto-clicking 重新检测, retrying
+  through 「检测人数过多」 busy toasts), trusted-clicks 发布, then confirms the
+  post is actually listed in **作品管理**.
+- **Detection-busy handling.** On `reason:"detection_busy"` the draft is safe:
+  wait ~7 minutes, retry once, and stop at a maximum of two publish calls —
+  never loop.
+- **作品管理 is the only authority.** A 发布成功 toast or the editor URL renaming
+  is *not* proof (抖音 renames its own URL, which previously caused false 已发布
+  reports). `published:true` means the post was seen in 作品管理 (审核中 counts);
+  an SMS/captcha 风控 wall is reported honestly as 「未确认发布」 with a
+  screenshot, never faked.
 
 ## How the flow fits together
 
@@ -23,20 +71,44 @@ It bundles the whole loop an autonomous run actually needs: *what to make* (per-
                  social-media-automation
                  (pick angle, write copy)
                             │
-              ┌─────────────┴──────────────┐
-              ▼                             ▼
-      douyin-shortform               (小红书 cards via
-   make_rich_video.py  ─┐            make_xhs_cards.py)
-   spec.json → 1080×1920 │                  │
-   natural voice + BGM   │                  │
-   + rotating styles     ▼                  ▼
+                            ▼
+                    douyin-shortform
+                  make_rich_video.py
+              spec.json → 1080×1920 mp4          (secondary: 小红书 cards
+              natural voice + BGM                 via make_xhs_cards.py,
+              + rotating styles                   知乎 answers as text)
+                            │                               │
+                            ▼                               ▼
                     content-publishing
-        browser_upload → browser_xhs_publish / browser_douyin_publish
-                    → verify-before-claim (URL / DOM / screenshot)
+     browser_upload (bound:true) → browser_douyin_publish → 作品管理 check
+               (小红书: drop-upload → browser_xhs_publish; 知乎: editor)
                             │
                             ▼
                   已发布 (with evidence) or 未确认发布
 ```
+
+## The three skills
+
+| Skill | Job | Key pieces |
+|-------|-----|-----------|
+| **`creative/douyin-shortform`** | Video — human-quality vertical short videos | `make_rich_video.py` + the `richlib/` style engine, B-roll helpers, TTS scripts, `make_xhs_cards.py` |
+| **`social-media/content-publishing`** | Publishing — the *one* canonical upload path per platform + verify-before-claim | `browser_upload` modes (upload binding via `verify_text`/`bound`), `browser_douyin_publish` / `browser_xhs_publish` publish contract, evidence gate |
+| **`social-media/social-media-automation`** | Strategy — *what* to make, per platform | per-platform content guidelines, identity-leak self-check, cron prompt template |
+
+## Also included: 小红书 & 知乎
+
+The same strategy + publishing skills cover the two secondary platforms:
+
+- **小红书 image notes** — `make_xhs_cards.py` builds a designed cover + 干货
+  carousel from a spec JSON, seeding a cohesive theme + layout from the topic
+  (batch-identical templates get throttled). Upload **must** use
+  `browser_upload(..., drop=true)` — 小红书's uploader only reacts to a drag-drop
+  `DataTransfer` and silently ignores `setInputFiles`. Publishing goes through
+  `browser_xhs_publish` (the 发布 button is a closed-shadow element whose
+  clickable pill is right-anchored — center-clicking misses), verified in
+  笔记管理.
+- **知乎 answers** — plain text through the logged-in editor, no file upload;
+  platform-specific notes in `references/zhihu-publishing.md`.
 
 ## Design principles
 
@@ -52,11 +124,9 @@ It bundles the whole loop an autonomous run actually needs: *what to make* (per-
   animated diagrams) mixed with kinetic text cards, voiced by a natural neural voice
   with low-volume background music ducked under the speech.
 - **Rotate the look.** The video builder's `richlib/` style engine picks one of five
-  visual languages per render (editorial / notebook / terminal / tabloid / keynote)
-  by topic affinity + anti-repeat, then randomizes palette and layout within it —
-  consecutive videos rarely share a look. The 小红书 card generator seeds a cohesive
-  theme + layout from the topic for the same reason (batch-identical templates get
-  throttled).
+  visual languages per render by topic affinity + anti-repeat, then randomizes
+  palette and layout within it — consecutive videos rarely share a look. The 小红书
+  card generator seeds a cohesive theme + layout from the topic for the same reason.
 - **The engine enforces quality.** `make_rich_video.py` refuses to render specs with
   duplicated narration, text-card stuffing, or too little real material, and runs an
   optional vision check that rejects login walls / webpage junk / irrelevant media —
@@ -69,15 +139,6 @@ It bundles the whole loop an autonomous run actually needs: *what to make* (per-
 
 ```
 skills/
-  social-media/
-    social-media-automation/
-      SKILL.md
-      references/
-        content-examples.md        # post patterns per platform
-        cron-prompt-template.md    # self-contained daily-content cron prompt
-        zhihu-publishing.md        # 知乎-specific notes
-    content-publishing/
-      SKILL.md
   creative/
     douyin-shortform/
       SKILL.md
@@ -93,6 +154,15 @@ skills/
         assets/
           bgm/                     # user-supplied public-domain music (see its README)
           fonts/                   # user-supplied handwriting font (see its README)
+  social-media/
+    content-publishing/
+      SKILL.md
+    social-media-automation/
+      SKILL.md
+      references/
+        content-examples.md        # post patterns per platform
+        cron-prompt-template.md    # self-contained daily-content cron prompt
+        zhihu-publishing.md        # 知乎-specific notes
 ```
 
 ## Install
@@ -100,13 +170,13 @@ skills/
 Drop the skills into your Hermes skills directory (it walks the tree recursively):
 
 ```bash
-git clone https://github.com/qiankangwang/auto-content-skills.git
-cp -r auto-content-skills/skills/* ~/.hermes/skills/
+git clone https://github.com/qiankangwang/content-autopilot.git
+cp -r content-autopilot/skills/* ~/.hermes/skills/
 # (or point HERMES_SKILLS_DIR at the cloned skills/ folder)
 ```
 
-The agent then loads `social-media-automation`, `content-publishing`, and
-`douyin-shortform` like any other skill.
+The agent then loads `douyin-shortform`, `content-publishing`, and
+`social-media-automation` like any other skill.
 
 ## Requirements
 

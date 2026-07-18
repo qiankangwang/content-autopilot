@@ -17,25 +17,36 @@ import argparse, base64, json, os, sys, uuid, urllib.request, urllib.error
 API = "https://openspeech.bytedance.com/api/v1/tts"
 
 
-def synth(text, out, appid, token, voice, cluster, speed):
+def synth(text, out, appid, token, voice, cluster, speed, emotion=""):
+    audio_cfg = {"voice_type": voice, "encoding": "mp3", "speed_ratio": float(speed),
+                 "loudness_ratio": 1.0}
+    if emotion:
+        # bigtts multi-emotion voices; unsupported voice/emotion combos error out,
+        # in which case we retry once without it (prosody > hard failure).
+        audio_cfg["emotion"] = emotion
+        audio_cfg["enable_emotion"] = True
     body = {
         "app": {"appid": appid, "token": token, "cluster": cluster},
         "user": {"uid": "hermes"},
-        "audio": {"voice_type": voice, "encoding": "mp3", "speed_ratio": float(speed),
-                  "loudness_ratio": 1.0},
+        "audio": audio_cfg,
         "request": {"reqid": uuid.uuid4().hex, "text": text, "operation": "query"},
     }
     req = urllib.request.Request(
         API, data=json.dumps(body).encode("utf-8"),
         headers={"Authorization": "Bearer;" + token, "Content-Type": "application/json"},
     )
+    resp = None
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             resp = json.load(r)
     except urllib.error.HTTPError as e:
         sys.stderr.write("VOLC TTS HTTP %d: %s\n" % (e.code, e.read().decode("utf-8", "replace")[:500]))
-        raise SystemExit(2)
-    if resp.get("code") != 3000:  # 3000 = Success on 火山 TTS
+        if not emotion:
+            raise SystemExit(2)
+    if not resp or resp.get("code") != 3000:  # 3000 = Success on 火山 TTS
+        if emotion:
+            sys.stderr.write("VOLC TTS: emotion '%s' rejected, retrying plain\n" % emotion)
+            return synth(text, out, appid, token, voice, cluster, speed, emotion="")
         sys.stderr.write("VOLC TTS ERROR: " + json.dumps(resp, ensure_ascii=False)[:400] + "\n")
         raise SystemExit(2)
     audio = base64.b64decode(resp["data"])
@@ -53,6 +64,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--voice", default=os.getenv("VOLC_TTS_VOICE", "zh_female_vv_uranus_bigtts"))
     ap.add_argument("--speed", default=os.getenv("VOLC_TTS_SPEED", "1.0"))
+    ap.add_argument("--emotion", default="", help="多情感音色的情感标签(如 surprise/angry/happy);不支持时自动降级")
     args = ap.parse_args()
 
     appid = os.getenv("VOLC_TTS_APPID", "").strip()
@@ -86,7 +98,7 @@ def main():
     if not text:
         sys.stderr.write("No --text / --text-file.\n")
         raise SystemExit(2)
-    synth(text, args.out, appid, token, args.voice, cluster, args.speed)
+    synth(text, args.out, appid, token, args.voice, cluster, args.speed, emotion=args.emotion)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,11 @@ fish_tts.json
 *.png
 !**/templates/**
 
+# Bundled binary assets (user-supplied; see scripts/assets/*/README.md)
+*.ttf
+*.otf
+*.ttc
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -248,15 +248,17 @@ html,body{width:%(W)dpx;height:%(H)dpx;overflow:hidden;-webkit-font-smoothing:an
 @keyframes kbPanR{0%%{transform:scale(1.16) translateX(-3%%)}100%%{transform:scale(1.16) translateX(3%%)}}
 .media-scrim{position:absolute;left:0;right:0;bottom:0;height:560px;
   background:linear-gradient(transparent,rgba(4,6,10,.62))}
-/* fit mode — landscape/wide material: blurred cover fill + the sharp image
-   contained in the middle (nothing cropped away) */
-.media-blur{position:absolute;inset:0;width:100%%;height:100%%;object-fit:cover;
-  filter:blur(46px) brightness(.5) saturate(1.1);transform:scale(1.18)}
+/* fit mode — landscape/wide material: the sharp image contained on the STYLE
+   CANVAS (the style's own background + a light wash show through), instead of
+   the old blurred-black fill that wasted 2/3 of the frame */
+.media-canvas{position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(0,0,0,.06),transparent 26%%,
+    transparent 66%%,rgba(0,0,0,.24))}
 .media-fitpos{position:absolute;left:50%%;top:44%%;transform:translate(-50%%,-50%%);
-  width:94%%;height:64%%;display:flex;align-items:center;justify-content:center;
-  overflow:hidden;border-radius:22px}
-.media-fit{width:100%%;height:100%%;object-fit:cover;border-radius:22px;
-  box-shadow:0 34px 90px rgba(0,0,0,.55)}
+  width:92%%;height:66%%;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;border-radius:26px}
+.media-fit{width:100%%;height:100%%;object-fit:cover;border-radius:26px;
+  box-shadow:0 40px 110px rgba(0,0,0,.5)}
 .scene.active .media-fit{animation:kbFit var(--kbd,8s) linear both}
 @keyframes kbFit{0%%{transform:scale(1.0)}100%%{transform:scale(1.055)}}
 /* video clips reuse .media-img / .media-fit classes; the renderer seeks them
@@ -291,12 +293,15 @@ video.media-img,video.media-fit{background:#0b0d12}
   color:#fff;border-radius:14px}
 /* overlay: a floating data/point card ON TOP of real footage — footage and the
    number/point on screen together (modular assembly, not either-or) */
-.media-ovl{position:absolute;top:300px;right:56px;max-width:560px;padding:26px 34px;
-  border-radius:22px;background:rgba(10,12,18,.74);color:#fff;text-align:right;
-  font-family:'Noto Sans CJK SC',sans-serif;opacity:0;box-shadow:0 18px 50px rgba(0,0,0,.4)}
+.media-ovl{position:absolute;top:300px;right:56px;max-width:calc(100%% - 132px);
+  padding:28px 38px;border-radius:22px;background:rgba(9,11,16,.94);color:#fff;
+  text-align:right;font-family:'Noto Sans CJK SC',sans-serif;opacity:0;
+  border-right:8px solid var(--ovl-accent,#FF2E4D);
+  box-shadow:0 24px 70px rgba(0,0,0,.55)}
 .scene.active .media-ovl{animation:diagPop .55s cubic-bezier(.2,1.4,.4,1) .5s both}
-.media-ovl .ov{font-weight:900;font-size:84px;line-height:1.05;letter-spacing:1px}
-.media-ovl .ol{font-size:31px;font-weight:700;opacity:.88;margin-top:8px}
+.media-ovl .ov{font-weight:900;font-size:84px;line-height:1.05;letter-spacing:1px;
+  text-shadow:0 4px 18px rgba(0,0,0,.5)}
+.media-ovl .ol{font-size:31px;font-weight:700;opacity:.94;margin-top:8px}
 
 /* ── speech-synced subtitles (global layer; the 抖音 watch-muted backbone) ── */
 .subs{position:absolute;left:0;right:0;bottom:296px;height:120px;z-index:6;pointer-events:none}
@@ -426,9 +431,9 @@ def media_scene(i, sc, ctx, kb_class="kb0", dur=8.0, fit=False, aspect=None):
     panel_style, ovl_style = "", ""
     if fit:
         a = aspect if (aspect and aspect > 0.05) else 1.4
-        panel_w = int(W_ * 0.94)
-        panel_h = int(min(panel_w / a, H_ * 0.62))
-        center_y = 0.36 if a >= 1.3 else 0.44
+        panel_w = int(W_ * 0.92)
+        panel_h = int(min(panel_w / a, H_ * 0.66))
+        center_y = 0.38 if a >= 1.3 else 0.44
         panel_top = max(int(H_ * center_y - panel_h / 2), 170)
         panel_style = (f'style="top:{panel_top}px;height:{panel_h}px;'
                        f'transform:translateX(-50%)"')
@@ -441,66 +446,71 @@ def media_scene(i, sc, ctx, kb_class="kb0", dur=8.0, fit=False, aspect=None):
                if ovl.get("value") else "")
         lab = (f'<div class="ol">{esc(ovl.get("label") or ovl.get("text"))}</div>'
                if (ovl.get("label") or ovl.get("text")) else "")
-        ovl_html = f'<div class="media-ovl" {ovl_style}>{val}{lab}</div>'
+        acc_style = f'style="--ovl-accent:{accent}"' if not ovl_style else \
+            ovl_style[:-1] + f';--ovl-accent:{accent}"'
+        ovl_html = f'<div class="media-ovl" {acc_style}>{val}{lab}</div>'
     vid = esc(str(sc.get("video", "")))
     img = esc(str(sc.get("image", "")))
+    # fit mode sits on the style canvas (style background shows through); the
+    # panel gets a hairline accent frame so it reads as designed, not floated
+    frame = f'border:3px solid {rgba(accent, 0.55)}'
+    if fit:
+        panel_style = panel_style[:-1] + f';{frame}"' if panel_style \
+            else f'style="{frame}"'
     if vid:
-        poster = esc(str(sc.get("_poster", "")))
-        blur_src = poster or img
-        if fit and blur_src:
-            body = (f'<div class="media-wrap"><img class="media-blur" src="file://{blur_src}">'
+        if fit:
+            body = (f'<div class="media-canvas"></div>'
                     f'<div class="media-fitpos" {panel_style}>'
                     f'<video class="media-fit" src="file://{vid}" muted preload="auto"></video>'
-                    f'</div></div>')
+                    f'</div>')
         else:
             body = (f'<div class="media-wrap">'
                     f'<video class="media-img" src="file://{vid}" muted preload="auto"></video></div>')
     elif fit:
-        body = (f'<div class="media-wrap"><img class="media-blur" src="file://{img}">'
-                f'<div class="media-fitpos" {panel_style}><img class="media-fit" src="file://{img}"></div></div>')
+        body = (f'<div class="media-canvas"></div>'
+                f'<div class="media-fitpos" {panel_style}><img class="media-fit" src="file://{img}"></div>')
     else:
         body = (f'<div class="media-wrap"><img class="media-img {kb_class}" src="file://{img}"></div>')
+    scrim = "" if fit else '<div class="media-scrim"></div>'
     return (f'<section class="scene media-scene" data-i="{i}" style="--kbd:{dur:.2f}s">'
-            f'{body}<div class="media-scrim"></div>{cap_html}{ovl_html}</section>')
+            f'{body}{scrim}{cap_html}{ovl_html}</section>')
 
 
 def diagram_scene(i, sc, ctx, dur=8.0):
-    """Architecture/flow diagram whose elements land ONE BY ONE, timed to the
+    """Architecture/flow diagram whose elements land step by step, timed to the
     narration (「讲架构的，一个一个走」). Spec:
 
       {"type":"diagram","say":"...","title":"整体架构",
        "nodes":[{"label":"用户","sub":"App/Web"},{"label":"API 网关"},{"label":"模型服务"}],
        "edges":["请求","转发"]}   # edge i sits between node i and node i+1 (label optional: "" )
 
-    Vertical chain layout (9:16-native). Node k pops in at its slot, then the
-    arrow to the next node draws, alternating — the whole build-out spans the
-    first ~75% of the scene so it finishes while the voice is still on it."""
+    Vertical chain layout (9:16-native). Each arrow lands TOGETHER with the
+    node it points to (a lone arrow into blank space read as broken — shipped
+    2026-07-17/18), and the whole build-out finishes inside the first ~50% of
+    the scene. The backdrop panel hugs the chain instead of covering the whole
+    frame (a full-screen near-empty white card was the #1 「烂尾卡」 complaint):
+    short chains scale UP to fill it, long chains scale down to protect the
+    subtitle band."""
     accent = ctx.get("accent", "#FF2E4D")
     nodes = sc.get("nodes") or []
     edges = sc.get("edges") or []
     n = len(nodes)
     if n == 0:
         return f'<section class="scene" data-i="{i}"></section>'
-    steps = n + min(len(edges), n - 1 if n > 1 else 0)
-    span = max(dur * 0.75, 1.2)
-    slot = span / max(steps, 1)
+    # one step per node; the arrow into node k shares node k's timeslot
+    span = max(min(dur * 0.5, n * 0.9), 1.0)
+    slot = span / max(n, 1)
     dark = "#10131a"
-    parts, t, k = [], 0.0, 0
+    parts = []
     title = sc.get("title")
     title_html = (f'<div class="diag-title" style="color:{dark}">{esc(title)}</div>'
                   if title else "")
     for idx, nd in enumerate(nodes):
         if isinstance(nd, str):
             nd = {"label": nd}
-        sub = f'<span class="sub2">{esc(nd.get("sub"))}</span>' if nd.get("sub") else ""
-        bg = rgba(accent, 0.14) if idx % 2 == 0 else "rgba(255,255,255,.92)"
-        border = f"3px solid {rgba(accent, 0.85)}"
-        parts.append(
-            f'<div class="diag-node" style="--nd:{t:.2f}s;background:{bg};'
-            f'border:{border};color:{dark}">{esc(nd.get("label", ""))}{sub}</div>')
-        t += slot
-        if idx < n - 1:
-            label = edges[idx] if idx < len(edges) else ""
+        t = idx * slot
+        if idx > 0:
+            label = edges[idx - 1] if idx - 1 < len(edges) else ""
             elabel = (f'<span class="elabel" style="background:{rgba(accent, 0.12)};'
                       f'color:{dark};border:2px solid {rgba(accent, 0.5)}">{esc(label)}</span>'
                       if label else "")
@@ -509,19 +519,29 @@ def diagram_scene(i, sc, ctx, dur=8.0):
                 f'<div class="shaft" style="background:{rgba(accent, 0.8)}"></div>'
                 f'<div class="head" style="border-top-color:{rgba(accent, 0.9)}"></div>'
                 f'{elabel}</div>')
-            t += slot
-    # Long chains must NEVER spill into the subtitle band (bottom ~420px): the
-    # wrap is unconstrained flex, so scale it down when the estimated height
-    # exceeds the room between the header and the subs (2026-07-15 user report:
-    # subtitles landing on the last node).
+        sub = f'<span class="sub2">{esc(nd.get("sub"))}</span>' if nd.get("sub") else ""
+        bg = rgba(accent, 0.14) if idx % 2 == 0 else "rgba(255,255,255,.92)"
+        border = f"3px solid {rgba(accent, 0.85)}"
+        parts.append(
+            f'<div class="diag-node" style="--nd:{t:.2f}s;background:{bg};'
+            f'border:{border};color:{dark}">{esc(nd.get("label", ""))}{sub}</div>')
+    # Size the panel to the CONTENT. Short chains scale up (fill the panel,
+    # no dead space); long chains scale down so they never spill into the
+    # subtitle band (bottom ~420px; 2026-07-15 user report).
     est_h = (156 if title else 0) + n * 134 + max(n - 1, 0) * 64
-    scale = min(1.0, 1330.0 / max(est_h, 1))
-    # a soft light panel behind the chain so it reads on ANY style background
+    max_h = 1240.0                      # room between header band and subs
+    upscale = 1.35 if n <= 3 else 1.15
+    scale = min(upscale, max_h / max(est_h, 1))
+    panel_h = int(est_h * scale + 150)
+    center_y = 820                      # visual center between chrome and subs
+    panel_top = max(center_y - panel_h // 2, 130)
     return (f'<section class="scene diagram-scene" data-i="{i}">'
-            f'<div style="position:absolute;inset:120px 60px 440px 60px;'
+            f'<div style="position:absolute;left:52px;right:52px;'
+            f'top:{panel_top}px;height:{panel_h}px;'
             f'background:rgba(250,250,252,.94);border-radius:34px;'
             f'box-shadow:0 40px 110px rgba(0,0,0,.35)"></div>'
-            f'<div class="diag-wrap" style="--dgscale:{scale:.3f}">'
+            f'<div class="diag-wrap" style="--dgscale:{scale:.3f};'
+            f'top:{panel_top + panel_h // 2}px">'
             f'{title_html}{"".join(parts)}</div></section>')
 
 
@@ -535,10 +555,68 @@ _SUB_STRIP = " ，。！？；、：,.!?;:…—"
 _SUB_NUM = re.compile(r"(\d+(?:\.\d+)?[%％]?(?:[万亿千百倍块元年月日号])?|[A-Za-z][A-Za-z0-9.\-]{1,14})")
 
 
+# natural break points inside an unpunctuated clause: AFTER a particle/aux
+# (的了着过就都也还才是在把被让给跟和与或), or BEFORE a connective (但因所如果
+# 虽然). Splitting anywhere else risks slicing a word in half (「就暴|露了」
+# shipped in a published video 2026-07-17).
+_SUB_BREAK_AFTER = "的了着过就都也还才是在把被让给跟和与或"
+_SUB_BREAK_BEFORE_RE = re.compile(r"[但因所若虽]|如果|但是|所以|因为|虽然|然后|结果|不过|而且")
+_SUB_TOKEN_RE = re.compile(r"\d+(?:\.\d+)?[%％]?|[A-Za-z][A-Za-z0-9.\-]*")
+
+
+def _split_points(p):
+    """Candidate split indices for clause p, best-first is NOT implied — the
+    caller picks the one closest to its target. Points never fall inside a
+    number/latin token."""
+    banned = set()
+    for m in _SUB_TOKEN_RE.finditer(p):
+        banned.update(range(m.start() + 1, m.end()))
+    pts = set()
+    for i, ch in enumerate(p[:-1]):
+        if ch in _SUB_BREAK_AFTER and (i + 1) not in banned:
+            pts.add(i + 1)
+    for m in _SUB_BREAK_BEFORE_RE.finditer(p):
+        if m.start() > 0 and m.start() not in banned:
+            pts.add(m.start())
+    # a number/latin token starts a new visual unit — breaking right before it
+    # beats slicing the CJK word that precedes it
+    for m in _SUB_TOKEN_RE.finditer(p):
+        if m.start() > 0:
+            pts.add(m.start())
+    return pts
+
+
+def _split_clause(p, max_len):
+    """Split an over-long unpunctuated clause at natural boundaries. Pieces
+    stay balanced (no 14+3 orphans): each cut targets the midpoint of what
+    remains, snapping to the nearest natural break; falls back to the plain
+    balanced cut only when no break point is anywhere near."""
+    out = []
+    while len(p) > max_len:
+        pieces = -(-len(p) // max_len)          # ceil
+        target = -(-len(p) // pieces)           # balanced piece length
+        pts = _split_points(p)
+        # nearest natural break within ±4 of the target (may overshoot max_len
+        # by 2 — the subtitle font auto-shrinks), else balanced cut; never
+        # leave a fragment shorter than 3 chars on either side. A cut whose
+        # NEXT char is a trailing particle strands it (「花在|了你…」shipped
+        # in QA) — deprioritize those.
+        cands = [i for i in pts if abs(i - target) <= 4 and 3 <= i <= len(p) - 3
+                 and i <= max_len + 2]
+        cut = min(cands, key=lambda i: (p[i] in _SUB_BREAK_AFTER, abs(i - target))) \
+            if cands else target
+        out.append(p[:cut])
+        p = p[cut:]
+    if p:
+        out.append(p)
+    return out
+
+
 def _sub_chunks(say, max_len=15):
     """Split narration into subtitle-sized phrase chunks (CJK ≤max_len each).
-    Over-long clauses split into BALANCED pieces (9+8, never 14+3) so names
-    don't get chopped into stray orphans mid-word."""
+    Punctuation splits first; over-long clauses split at natural word
+    boundaries (particles/connectives), balanced, never inside numbers or
+    latin tokens."""
     parts = [p.strip(_SUB_STRIP) for p in _SUB_SPLIT.split(str(say or "")) if p]
     chunks = []
     for p in parts:
@@ -547,10 +625,7 @@ def _sub_chunks(say, max_len=15):
         if len(p) <= max_len:
             chunks.append(p)
             continue
-        pieces = -(-len(p) // max_len)          # ceil
-        size = -(-len(p) // pieces)             # balanced piece length
-        for k in range(0, len(p), size):
-            chunks.append(p[k:k + size])
+        chunks.extend(_split_clause(p, max_len))
     return [c for c in chunks if c]
 
 

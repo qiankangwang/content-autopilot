@@ -19,7 +19,7 @@ same-style videos still differ. The TTS/timing/cover/mux below is unchanged.
 spec JSON (content only — the STYLE is chosen by the engine, not the spec):
 {
   "tag": "AI编程",                  # small label/pill (optional)
-  "handle": "@yourhandle",          # bottom handle (default @yourhandle)
+  "handle": "@yourhandle",                # bottom handle (default @yourhandle)
   "title": "...",                   # used for style affinity + seed (optional)
   "style": "terminal",              # OPTIONAL hard override of the rotation
   "scenes": [
@@ -129,7 +129,7 @@ def validate_spec(spec):
     if len(text_idx) > 3:
         problems.append(
             f"纯文字卡有 {len(text_idx)} 屏(scene {text_idx}),上限 3 屏。"
-            f"多出来的换成 media(真实素材)或 diagram。找不到素材就用 AI 插画:"
+            f"多出来的换成 media(真实素材)或 diagram。找不到素材才用 AI 插画(全片限 1 张):"
             f"python $SKILL_DIR/scripts/gen_scene_image.py --desc \"<画面内容一句话>\" --out <工作目录>/genN.png")
     for a, b in zip(text_idx, text_idx[1:]):
         if b == a + 1:
@@ -145,9 +145,21 @@ def validate_spec(spec):
         problems.append(
             f"可用的真实素材场景只有 {media_ok} 个(共 {n} 屏),至少要 {need} 个。"
             f"补素材三选一:fetch_web_clip.py(新闻视频) / record_page_clip.py --start-y 700(页面实录) / "
-            f"browser_screenshot;都拿不到就 AI 插画兜底:"
+            f"browser_screenshot;都拿不到就 AI 插画兜底(全片限 1 张):"
             f"python $SKILL_DIR/scripts/gen_scene_image.py --desc \"<画面内容>\" --out <工作目录>/genN.png "
             f"然后填进 scene 的 image 字段。")
+
+    # 5. AI illustrations: at most ONE per video (user policy 2026-07-19 — the
+    # 07-17/18 videos leaned on 2-3 CogView images each and read as AI slop).
+    # Detected via the .ai sidecar gen_scene_image writes + the genN.png naming.
+    ai_idx = [i for i, sc in enumerate(scenes) if sc.get("type") == "media" and (
+        os.path.isfile(str(sc.get("image", "")) + ".ai")
+        or os.path.basename(str(sc.get("image", ""))).lower().startswith("gen"))]
+    if len(ai_idx) > 1:
+        problems.append(
+            f"AI 插画用了 {len(ai_idx)} 张(scene {ai_idx}),全片上限 1 张。"
+            f"多出来的换成真实素材(fetch_web_clip / record_page_clip / browser_screenshot),"
+            f"真实素材才是画面的主体,AI 插画只是最后的兜底。")
 
     if problems:
         lines = ["", "[rich] ❌ spec 校验不通过,拒绝出片。按下面逐条修完 spec.json 再重跑同一条命令:"]
@@ -465,10 +477,10 @@ def prepare_clips(spec, workdir):
     frame is extracted (fit-mode blur layer) and the aspect decides fit/cover.
     Mutates the scene dicts in place (video path, _poster, _fit).
 
-    Media images are also COPIED into the local workdir first: content dirs may
-    live on slow bind-mounted/network filesystems, and having chromium raster
-    large files over such a channel has been implicated in render crashes.
-    Local reads take the whole variable off the table."""
+    Media images are also COPIED into the container-local workdir first: the
+    content dirs are Windows bind mounts, and having chromium raster large
+    files over the Docker file-sharing channel was implicated in the 2026-07-15
+    render crash cascade. Local reads take the whole variable off the table."""
     for i, sc in enumerate(spec.get("scenes", [])):
         if sc.get("type") == "media" and sc.get("image"):
             src = str(sc["image"])
@@ -511,19 +523,31 @@ def prepare_clips(spec, workdir):
 
 
 # ----------------------------------------------------------------------------- media verification
-_VISION_CREDS_PATHS = [os.path.expanduser("~/.config/zhipu_vision.json"),
+# Primary reviewer = Kimi k2.6 vision (the unified vision plan; Moonshot CN
+# endpoint). glm-4v-flash stays as the fallback — it let a full-page article
+# screenshot through on 2026-07-19 (prompt listed 大段文章正文排版 as junk and
+# it still passed), so it is no longer the judge of record.
+_VISION_CREDS_PATHS = [os.path.expanduser("~/.config/moonshot_vision.json"),
+                       "/root/.config/moonshot_vision.json",
+                       os.path.expanduser("~/.config/zhipu_vision.json"),
                        "/root/.config/zhipu_vision.json"]
 
 
 def _load_vision_creds():
+    """Return ALL readable cred sets, priority order (primary first).
+    ~ expands to /root in the container, so dedupe by realpath."""
+    out, seen = [], set()
     for p in _VISION_CREDS_PATHS:
-        if os.path.isfile(p):
-            try:
-                with open(p, encoding="utf-8") as fh:
-                    return json.load(fh)
-            except Exception:
-                pass
-    return None
+        rp = os.path.realpath(p)
+        if rp in seen or not os.path.isfile(p):
+            continue
+        seen.add(rp)
+        try:
+            with open(p, encoding="utf-8") as fh:
+                out.append(json.load(fh))
+        except Exception:
+            pass
+    return out
 
 
 def _vision_check(image_path, say, creds):
@@ -551,7 +575,9 @@ def _vision_check(image_path, say, creds):
         f"「{say}」\n"
         "抖音观众一眼能看出「截网页」很廉价。**网页垃圾**只指以下明确元素:网站导航条/顶部菜单栏、"
         "未播放视频上的大播放按钮▶、右侧点赞评论转发栏、底部无关的推荐视频缩略图、"
-        "「打开APP/下载/查看精彩图片」横幅或按钮、搜索框、面包屑、大段文章正文排版。\n"
+        "「打开APP/下载/查看精彩图片」横幅或按钮、搜索框、面包屑。\n"
+        "**文字墙**单独判:画面的主体(超过一半面积)是密密麻麻的文章正文/段落文字,"
+        "缩到手机竖屏上根本读不清——整页文章截图就是典型。有醒目大标题+少量文字的海报/标题卡不算。\n"
         "⚠️ 以下**不算**垃圾:新闻片自带的角标/台标/小水印、画面里烧进去的新闻字幕条、"
         "日期地点标注、插画风格的示意图——这些都是正常素材。\n"
         "junk_element 必须写出你具体看到了上述哪个元素;写不出来就必须判 false。\n"
@@ -559,29 +585,39 @@ def _vision_check(image_path, say, creds):
         '{"login_wall": <有无登录弹窗/扫码二维码/登录遮罩,true|false>, '
         '"webpage_junk": <含上述明确网页外壳元素才 true,否则 false>, '
         '"junk_element": "<具体看到的元素,没有就空字符串>", '
+        '"text_wall": <画面主体是大段密集正文文字,true|false>, '
         '"relevant": <画面主要内容与口播主题是否相关,true|false>, '
         '"content": "<一句话:画面主要是什么>"}'
     )
-    body = {
-        "model": creds.get("model", "glm-4v-flash"),
-        "temperature": 0.1,
-        "messages": [{"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": f"data:image/{mime};base64,{b64}"}},
-            {"type": "text", "text": prompt},
-        ]}],
-    }
-    for attempt in range(2):
-        try:
-            r = _rq.post(creds["base_url"].rstrip("/") + "/chat/completions", json=body,
-                         headers={"Authorization": "Bearer " + creds["api_key"]}, timeout=60)
-            r.raise_for_status()
-            txt = r.json()["choices"][0]["message"]["content"]
-            m = re.search(r"\{.*\}", txt, re.S)
-            if m:
-                return json.loads(m.group(0))
-        except Exception as e:
-            if attempt == 1:
-                sys.stderr.write(f"[rich] vision check unavailable for {os.path.basename(image_path)}: {e}\n")
+    creds_list = creds if isinstance(creds, list) else [creds]
+    for ci, cred in enumerate(creds_list):
+        body = {
+            "model": cred.get("model", "glm-4v-flash"),
+            "temperature": 0.1,
+            "messages": [{"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": f"data:image/{mime};base64,{b64}"}},
+                {"type": "text", "text": prompt},
+            ]}],
+        }
+        for attempt in range(2):
+            try:
+                r = _rq.post(cred["base_url"].rstrip("/") + "/chat/completions", json=body,
+                             headers={"Authorization": "Bearer " + cred["api_key"]}, timeout=60)
+                r.raise_for_status()
+                txt = r.json()["choices"][0]["message"]["content"]
+                m = re.search(r"\{.*\}", txt, re.S)
+                if m:
+                    return json.loads(m.group(0))
+            except Exception as e:
+                if attempt == 0:
+                    time.sleep(4)      # rate limits (429) need a beat, not a hammer
+                else:
+                    tag = cred.get("model", "?")
+                    if ci == len(creds_list) - 1:
+                        sys.stderr.write(f"[rich] vision check unavailable for "
+                                         f"{os.path.basename(image_path)} (last={tag}): {e}\n")
+                    else:
+                        sys.stderr.write(f"[rich] vision {tag} failed, trying fallback: {e}\n")
     return None
 
 
@@ -610,6 +646,10 @@ def verify_media(spec):
         desc = str(verdict.get("content", ""))[:80]
         if verdict.get("login_wall"):
             failures.append((i, name, say, f"登录墙/扫码弹窗 — {desc}"))
+        elif verdict.get("text_wall"):
+            failures.append((i, name, say,
+                             f"整页文字墙(手机上根本读不清)— {desc}。换成文章里的配图/页面实录片段,"
+                             f"或干脆用 diagram 把要点画出来"))
         elif verdict.get("webpage_junk") and str(verdict.get("junk_element", "")).strip():
             failures.append((i, name, say,
                              f"截网页外壳({str(verdict.get('junk_element'))[:40]})太廉价 — {desc}"))
@@ -628,7 +668,7 @@ def verify_media(spec):
                 f"       a) 官方/新闻视频: python $SKILL_DIR/scripts/fetch_web_clip.py --url <相关视频页或mp4直链> --out <工作目录>/fix{i}.webm --seconds 8",
                 f"       b) 页面实录:     python $SKILL_DIR/scripts/record_page_clip.py --url <新闻原文/GitHub/官网> --out <工作目录>/fix{i}.webm --seconds 6",
                 f"       c) 已登录浏览器截图: browser_navigate 相关页面 → browser_screenshot → cp 到工作目录",
-                f"       d) 都拿不到 → AI 插画兜底(禁止改成文字卡!): python $SKILL_DIR/scripts/gen_scene_image.py"
+                f"       d) 都拿不到 → AI 插画兜底(禁止改成文字卡!全片限 1 张): python $SKILL_DIR/scripts/gen_scene_image.py"
                 f" --desc \"<这一屏该画什么,一句话>\" --out <工作目录>/gen{i}.png",
                 f"     换好后更新 spec.json 里 scene {i} 的 image/video 字段。",
             ]
@@ -697,12 +737,12 @@ def build_html(spec, durs, out_path="", explicit_style=None, timings=None):
 
 # ----------------------------------------------------------------------------- render
 def record_frames_subproc(html_path, durs, fps, workdir):
-    """Run the frame capture in a FRESH python subprocess. Observed in
-    production: after build_audio's ~40 subprocess calls, a chromium launched
-    from the SAME python process crashed on heavy pages 100% of the time
-    ("Target crashed"), while an identical launch from a clean process
-    succeeded 100%. Never pinned the exact poison (not pids, not fonts, not
-    time) — so the render simply always gets a clean process."""
+    """Run the frame capture in a FRESH python subprocess. Root cause of the
+    2026-07-15 all-nighter: after build_audio's ~40 subprocess calls, a chromium
+    launched from the SAME python process crashed on heavy pages 100% of the
+    time ("Target crashed"), while an identical launch from a clean process
+    succeeded 100%. Never pinned the exact poison (not pids, not fonts, not the
+    bind mount, not time) — so the render simply always gets a clean process."""
     argf = os.path.join(workdir, "_render_args.json")
     with open(argf, "w", encoding="utf-8") as f:
         json.dump({"html": html_path, "durs": durs, "fps": fps, "workdir": workdir}, f)
@@ -732,8 +772,8 @@ def record_frames(html_path, durs, fps, workdir, _attempts=3):
 
     The whole capture retries on a fresh browser if chromium dies mid-render —
     the container's headless shell intermittently loses its GPU process right
-    after (re)start (SwiftShader init flake); a relaunch reliably succeeds, so
-    flaky-fatal becomes deterministic.
+    after (re)start (SwiftShader init flake, 2026-07-15); a relaunch reliably
+    succeeds, so flaky-fatal becomes deterministic.
     """
     last_err = None
     for attempt in range(_attempts):
@@ -762,8 +802,8 @@ def _record_frames_once(html_path, durs, fps, workdir):
 
     with sync_playwright() as p:
         # channel="chromium" = the FULL chromium build, NOT chromium_headless_shell.
-        # The headless shell's GPU/SwiftShader stack has crash-looped on heavy
-        # pages in some container environments ("Target crashed" at the first
+        # The headless shell's GPU/SwiftShader stack crash-looped on heavy pages in
+        # this WSL container all night 2026-07-15 ("Target crashed" at the first
         # screenshot, env-dependent); the full build renders the same pages fine.
         # --disable-gpu: frame-exact screenshots need no GPU anyway.
         browser = p.chromium.launch(channel="chromium",
@@ -790,7 +830,8 @@ def _record_frames_once(html_path, durs, fps, workdir):
             local_t = (f - scene_start_f) / fps
             page.evaluate("window.__seekVideos(%d, %f)" % (cur_scene, local_t))
             # JPEG q90: ~5-8x smaller than PNG per frame. A 40s video is ~1200
-            # frames — PNG frames balloon disk usage fast.
+            # frames — PNG frames ballooned the WSL disk (which only ever
+            # grows) and helped fill the host drive.
             page.screenshot(path=os.path.join(frames_dir, "f%05d.jpg" % f),
                             type="jpeg", quality=90)
         browser.close()
@@ -834,11 +875,13 @@ def main():
 
     base.ensure_fonts()      # install bundled handwriting font (idempotent, for notebook style)
 
-    # /tmp and /var/tmp are often small tmpfs mounts in containers — a 37s
-    # render's ~1100 frame JPEGs (~300MB) can overflow them and kill the
-    # renderer (headless_shell segfaults without ever reporting ENOSPC; full
-    # chromium at least reports ENOSPC). The frame workdir must live on a
-    # disk-backed dir, NOT tmpfs — /var/cache here, ~/.cache as fallback.
+    # BOTH /tmp and /var/tmp in the agent container are small tmpfs mounts — a
+    # 37s render's ~1100 frame JPEGs (~300MB) overflow them and the renderer
+    # dies (headless_shell segfaulted, full chromium reports ENOSPC; this was
+    # the root cause of the entire 2026-07-15 crash night). The overlay root
+    # (~1TB) is the only real disk, so the work tree lives under /root/.cache.
+    # (/root is itself the Windows bind mount, so ~/.cache is NOT overlay —
+    # /var/cache is.)
     _work_base = "/var/cache/rich-work" if os.path.isdir("/var/cache") \
         else os.path.expanduser("~/.cache/rich-work")
     try:

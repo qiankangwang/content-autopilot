@@ -2,14 +2,18 @@
 # -*- coding: utf-8 -*-
 """style_terminal — C · 终端/IDE (GitHub-dark, mono, code blocks, command line).
 
-On-brand for an AI-coding account: editor windows with traffic-lights + filename
-tabs + line numbers, a $ prompt with a blinking caret, diffs, a status bar.
-variant() rotates the accent, filename, and a layout per scene type.
+On-brand for an AI-coding account: the WHOLE frame is one live terminal window
+(titlebar + line-number gutter + scanlines + status bar), every text card is
+framed as command output (a dim pseudo-prompt above it), and oversized ghost
+ASCII glyphs / stroked ghost numbers fill what used to be dead space.
+variant() rotates the accent, filename, pseudo path, and a layout per type.
 """
-from .base import Style, esc, big_fs, highlight, blob, scene_types
+from .base import Style, esc, big_fs, highlight, blob, scene_types, rgba
 
 _ACCENTS = ["#7ee787", "#79c0ff", "#d2a8ff", "#ffa657", "#56d4dd"]
 _FILES = ["openai_chips.ts", "today.py", "ai_news.md", "notes.rs", "ship.go"]
+# neutral pseudo paths for the window titlebar — no usernames, no branding
+_PATHS = ["~/notes/today", "~/dev/scratch", "~/work/draft.md", "~/inbox/read.md"]
 
 
 def _fill(css, m):
@@ -46,13 +50,38 @@ class TerminalStyle(Style):
         return {
             "accent": rng.choice(_ACCENTS),
             "file": rng.choice(_FILES),
+            "path": rng.choice(_PATHS),
             "hook": rng.choice(["prompt", "comment", "tab"]),
             "stat": rng.choice(["diff", "stdout", "neon"]),
             "bullets": rng.choice(["checklist", "stdout"]),
         }
 
     def css(self, ctx):
-        return _fill(_CSS, {"__ACCENT__": ctx["accent"]})
+        return _fill(_CSS, {
+            "__ACCENT__": ctx["accent"],
+            "__GLOW__": rgba(ctx["accent"], 0.12),
+            "__GHOST__": rgba(ctx["accent"], 0.07),
+            "__GSTROKE__": rgba(ctx["accent"], 0.16),
+        })
+
+    def background(self, ctx):
+        # structural terminal-window furniture (NOT branding): titlebar with
+        # traffic lights + a neutral pseudo path, a dim line-number gutter,
+        # faint scanlines, and a neutral status bar. Fills the dead space that
+        # made text cards read as unfinished PPT (2026-07-19 review).
+        nums = "".join(f"<span>{n}</span>" for n in range(1, 41))
+        return ('<div class="tm-bg">'
+                '<div class="tm-scan"></div>'
+                '<div class="tm-titlebar">'
+                '<span class="d r"></span><span class="d y"></span><span class="d g"></span>'
+                f'<span class="tm-path">{esc(ctx.get("path", "~/notes/today"))}</span>'
+                '<span class="tm-winlab">bash</span></div>'
+                f'<div class="tm-gutter">{nums}</div>'
+                '<div class="tm-statusbar"><span class="tm-mode">-- INSERT --</span>'
+                '<span class="tm-sep">·</span><span>UTF-8</span>'
+                '<span class="tm-sep">·</span><span>LF</span>'
+                '<span class="tm-fillsp"></span><span>ln 12, col 3</span></div>'
+                '</div>')
 
     def chrome(self, spec, ctx):
         return ""   # no corner branding (user decision 2026-07-18)
@@ -72,40 +101,58 @@ class TerminalStyle(Style):
         if t == "bullets":
             return self._bullets(i, sc, ctx)
         body = esc(sc.get("caption") or sc.get("say", ""))
-        return f'<section class="scene tm" data-i="{i}"><div class="tm-cmt">// {body}</div></section>'
+        return (f'<section class="scene tm" data-i="{i}">'
+                f'<div class="tm-ghost">&gt;</div>'
+                f'<div class="tm-pp">$ echo</div><div class="tm-cmt">// {body}</div></section>')
 
     def _hook(self, i, sc, ctx):
         lines = sc.get("lines", []) or [sc.get("say", "")]
-        fs = big_fs(lines, base=104)
-        head = "".join(f'<div class="tm-h" style="--d:{0.10*j:.2f}s;font-size:{fs}px">{esc(x)}</div>' for j, x in enumerate(lines))
+        fs = big_fs(lines, base=148)
+        head = "".join(f'<div class="tm-h" style="--d:{0.10*j:.2f}s;font-size:{fs}px">{esc(x)}</div>'
+                       for j, x in enumerate(lines))
+        eb = esc(sc.get("eyebrow", "")) or "今日头条"
         mode = ctx["hook"]
         if mode == "comment":
-            top = f'<div class="tm-banner">/* {esc(sc.get("eyebrow","")) or "今日头条"} */</div>'
+            top = (f'<div class="tm-pp">$ cat hook.md</div>'
+                   f'<div class="tm-banner">/* {eb} */</div>')
         elif mode == "tab":
             top = (f'<div class="tm-tabbar"><span class="d r"></span><span class="d y"></span><span class="d g"></span>'
-                   f'<span class="tm-tab">{esc(ctx["file"])}</span></div>')
+                   f'<span class="tm-tab">{esc(ctx["file"])}</span></div>'
+                   f'<div class="tm-eb"># {eb}</div>')
         else:
-            top = f'<div class="tm-prompt">$ ai-news --why<span class="cur"></span></div>'
-        return f'<section class="scene tm hook" data-i="{i}">{top}<div class="tm-head">{head}</div></section>'
+            top = (f'<div class="tm-prompt">$ cat hook.md<span class="cur"></span></div>'
+                   f'<div class="tm-eb"># {eb}</div>')
+        return (f'<section class="scene tm hook" data-i="{i}">'
+                f'<div class="tm-ghost">&gt;</div>'
+                f'{top}<div class="tm-head">{head}</div></section>')
 
     def _outro(self, i, sc, ctx):
         lines = sc.get("lines", []) or [sc.get("say", "")]
-        fs = big_fs(lines, base=96)
-        head = "".join(f'<div class="tm-h" style="--d:{0.10*j:.2f}s;font-size:{fs}px">{esc(x)}</div>' for j, x in enumerate(lines))
-        return (f'<section class="scene tm outro" data-i="{i}"><div class="tm-prompt">$ git commit -m<span class="cur"></span></div>'
+        fs = big_fs(lines, base=118)
+        head = "".join(f'<div class="tm-h" style="--d:{0.10*j:.2f}s;font-size:{fs}px">{esc(x)}</div>'
+                       for j, x in enumerate(lines))
+        return (f'<section class="scene tm outro" data-i="{i}">'
+                f'<div class="tm-ghost bottom">_</div>'
+                f'<div class="tm-prompt">$ git commit -m<span class="cur"></span></div>'
                 f'<div class="tm-head">{head}</div></section>')
 
     def _stat(self, i, sc, ctx):
         val, unit, label = esc(sc.get("value", "")), esc(sc.get("unit", "")), esc(sc.get("label", ""))
         m = ctx["stat"]
+        ghost = f'<div class="tm-ghostnum">{val}</div>'
         if m == "diff":
-            return (f'<section class="scene tm stat" data-i="{i}"><div class="tm-difflines">'
+            return (f'<section class="scene tm stat" data-i="{i}">{ghost}'
+                    f'<div class="tm-pp">$ git diff --stat</div>'
+                    f'<div class="tm-difflines">'
                     f'<div class="tm-d minus">- 老办法</div>'
                     f'<div class="tm-d plus">+ {label} <span class="tm-big">{val}{unit}</span></div></div></section>')
         if m == "stdout":
-            return (f'<section class="scene tm stat" data-i="{i}"><div class="tm-prompt">$ measure<span class="cur"></span></div>'
+            return (f'<section class="scene tm stat" data-i="{i}">{ghost}'
+                    f'<div class="tm-prompt">$ cat stats.log<span class="cur"></span></div>'
                     f'<div class="tm-out">&gt;&gt; {label}: <span class="tm-big">{val}{unit}</span></div></section>')
-        return (f'<section class="scene tm stat neon" data-i="{i}"><div class="tm-neon">{val}<span class="su">{unit}</span></div>'
+        return (f'<section class="scene tm stat neon" data-i="{i}">{ghost}'
+                f'<div class="tm-pp">$ echo $RESULT</div>'
+                f'<div class="tm-neon">{val}<span class="su">{unit}</span></div>'
                 f'<div class="tm-cmt">// {label}</div></section>')
 
     def _code(self, i, sc, ctx):
@@ -119,7 +166,10 @@ class TerminalStyle(Style):
                 f'<div class="tm-codebody">{body}</div></div>{cap}</section>')
 
     def _compare(self, i, sc, ctx):
-        return (f'<section class="scene tm cmp" data-i="{i}"><div class="tm-win">'
+        return (f'<section class="scene tm cmp" data-i="{i}">'
+                f'<div class="tm-ghost">$</div>'
+                f'<div class="tm-pp">$ git diff</div>'
+                f'<div class="tm-win">'
                 f'<div class="tm-winbar"><span class="d r"></span><span class="d y"></span><span class="d g"></span>'
                 f'<span class="tm-tab">diff</span></div>'
                 f'<div class="tm-codebody"><div class="tm-cl minus"><span class="tm-ln">-</span><span class="tm-ct">{esc(sc.get("before",""))}</span></div>'
@@ -129,45 +179,80 @@ class TerminalStyle(Style):
         head = f'<div class="tm-bhead"># {esc(sc["head"])}</div>' if sc.get("head") else ""
         rows = sc.get("lines", [])
         if ctx["bullets"] == "checklist":
+            pp = '<div class="tm-pp">$ cat todo.md</div>'
             items = "".join(f'<div class="tm-li" style="--d:{0.12*j:.2f}s"><span class="tm-box">[<span class="tm-x">x</span>]</span>'
                             f'<span class="tm-lt">{esc(x)}</span></div>' for j, x in enumerate(rows))
         else:
+            pp = '<div class="tm-pp">$ ls -1 notes/</div>'
             items = "".join(f'<div class="tm-li" style="--d:{0.12*j:.2f}s"><span class="tm-box">&gt;</span>'
                             f'<span class="tm-lt">{esc(x)}</span></div>' for j, x in enumerate(rows))
-        return f'<section class="scene tm bul" data-i="{i}">{head}<div class="tm-list">{items}</div></section>'
+        return (f'<section class="scene tm bul" data-i="{i}">'
+                f'<div class="tm-ghost">#</div>'
+                f'{pp}{head}<div class="tm-list">{items}</div></section>')
 
 
 _CSS = r"""
 html,body{background:#0b0f17;font-family:"Noto Sans Mono CJK SC","DejaVu Sans Mono",monospace;color:#c9d1d9}
 .bar{background:__ACCENT__;height:8px;box-shadow:0 0 16px __ACCENT__}
-.scene.tm{padding:0 60px}
+.scene.tm{padding:0 78px 0 104px}
 .d{width:18px;height:18px;border-radius:50%;display:inline-block}.r{background:#ff5f56}.y{background:#ffbd2e}.g{background:#27c93f}
-.tm-status{position:absolute;bottom:84px;left:60px;right:60px;z-index:6;font-size:26px;color:#8b949e;display:flex;align-items:center;gap:14px}
-.tm-on{color:__ACCENT__}.tm-sep{color:#3d444d}.tm-br{margin-left:auto;color:__ACCENT__;opacity:.8}
+/* full-frame terminal window furniture (background layer, every scene) */
+.tm-bg{position:absolute;inset:0;z-index:0;pointer-events:none}
+.tm-scan{position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.016) 0 2px,transparent 2px 6px)}
+.tm-titlebar{position:absolute;top:0;left:0;right:0;height:88px;display:flex;align-items:center;
+  gap:11px;padding:0 34px;background:#10151d;border-bottom:1px solid #20262f}
+.tm-path{margin-left:18px;color:#8b949e;font-size:30px}
+.tm-winlab{margin-left:auto;color:#3d444d;font-size:26px}
+.tm-gutter{position:absolute;top:112px;bottom:160px;left:20px;width:52px;overflow:hidden;
+  font-size:24px;line-height:46px;text-align:right;color:#252c37}
+.tm-gutter span{display:block}
+.tm-statusbar{position:absolute;left:0;right:0;bottom:8px;height:56px;display:flex;align-items:center;
+  gap:18px;padding:0 34px;background:#10151d;border-top:1px solid #20262f;font-size:26px;color:#57606a}
+.tm-mode{color:__ACCENT__;opacity:.85}.tm-sep{color:#3d444d}.tm-fillsp{margin-left:auto}
+/* ghost glyphs: oversized ASCII ornaments that fill the dead space */
+.tm-ghost{position:absolute;top:100px;right:6px;font-size:820px;line-height:1;font-weight:700;
+  color:__GHOST__;pointer-events:none}
+.tm-ghost.bottom{top:auto;bottom:30px}
+.tm-ghostnum{position:absolute;top:170px;right:30px;font-family:"Noto Sans CJK SC",sans-serif;
+  font-size:500px;line-height:1;font-weight:900;color:transparent;
+  -webkit-text-stroke:3px __GSTROKE__;letter-spacing:-10px;pointer-events:none}
+/* subtitles: terminal skin (deep plate + accent left bar; white+stroke from base) */
+.sub{background:rgba(13,17,23,.9);border-radius:8px;
+  border-left:12px solid __ACCENT__;padding:6px 30px 10px 26px}
+/* media fit canvas: dark base + faint scanlines + accent glow instead of black blur */
+.media-canvas{background:
+  repeating-linear-gradient(0deg,rgba(255,255,255,.014) 0 2px,transparent 2px 6px),
+  radial-gradient(90% 60% at 50% 34%,__GLOW__,transparent 70%),
+  linear-gradient(180deg,#0d1117,#0b0f17)}
+.media-fit,.media-fitpos{border-radius:14px}
+/* pseudo-prompt: dim command line that frames each card as terminal output */
+.tm-pp{font-size:34px;color:#7d8590;opacity:.8;margin-bottom:26px}
+.tm-eb{font-size:36px;color:__ACCENT__;opacity:.85;letter-spacing:3px;margin-bottom:24px}
 /* hook */
-.tm-prompt{font-size:40px;color:#e6edf3;margin-bottom:30px}
+.tm-prompt{font-size:46px;color:#e6edf3;margin-bottom:30px}
 .cur{display:inline-block;width:20px;height:38px;background:__ACCENT__;vertical-align:-6px;margin-left:8px;animation:bl 1s steps(1) infinite}
-.tm-banner{font-size:38px;color:#8b949e;font-style:italic;margin-bottom:26px}
-.tm-tabbar{display:inline-flex;align-items:center;gap:11px;background:#161b22;border:1px solid #20262f;border-bottom:none;
-  border-radius:12px 12px 0 0;padding:16px 26px;margin-bottom:0}
+.tm-banner{font-size:42px;color:#8b949e;font-style:italic;margin-bottom:26px}
+.tm-tabbar{display:inline-flex;align-items:center;gap:11px;background:#161b22;border:1px solid #20262f;
+  border-radius:12px;padding:16px 26px;margin-bottom:26px;align-self:flex-start}
 .tm-tabbar .tm-tab{margin-left:14px;color:#e6edf3;font-size:30px}
-.tm-head{}
-.tm-h{font-family:"Noto Sans CJK SC",sans-serif;font-weight:900;line-height:1.1;color:#e6edf3;opacity:0;transform:translateY(20px)}
+.tm-head{position:relative}
+.tm-h{font-family:"Noto Sans CJK SC",sans-serif;font-weight:900;line-height:1.12;color:#e6edf3;opacity:0;transform:translateY(20px)}
 .scene.active .tm-h{animation:tmrise .6s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:var(--d)}
 .tm-h:last-of-type{color:__ACCENT__}
 /* stat */
-.tm-difflines{font-size:64px;font-weight:700}
-.tm-d{padding:18px 30px;border-radius:10px;opacity:0;transform:translateX(-26px)}
+.tm-difflines{font-size:78px;font-weight:700}
+.tm-d{padding:20px 32px;border-radius:10px;opacity:0;transform:translateX(-26px)}
 .scene.active .tm-d{animation:tmslide .55s cubic-bezier(.2,.7,.2,1) forwards}
 .tm-d.minus{color:#8b949e;background:rgba(248,81,73,.10);text-decoration:line-through}
-.tm-d.plus{color:#7ee787;background:rgba(63,185,80,.12);margin-top:18px}.scene.active .tm-d.plus{animation-delay:.2s}
+.tm-d.plus{color:#7ee787;background:rgba(63,185,80,.12);margin-top:20px}.scene.active .tm-d.plus{animation-delay:.2s}
 .tm-big{font-weight:900}
-.tm-out{font-size:60px;color:#c9d1d9;margin-top:10px}.tm-out .tm-big{color:__ACCENT__;font-weight:900;font-size:88px}
-.tm-neon{font-family:"Noto Sans CJK SC",sans-serif;font-weight:900;font-size:320px;line-height:.92;color:__ACCENT__;
+.tm-out{font-size:72px;color:#c9d1d9;margin-top:10px}.tm-out .tm-big{color:__ACCENT__;font-weight:900;font-size:112px}
+.tm-neon{font-family:"Noto Sans CJK SC",sans-serif;font-weight:900;font-size:360px;line-height:.92;color:__ACCENT__;
   text-shadow:0 0 50px __ACCENT__;opacity:0;transform:translateY(24px)}
 .scene.active .tm-neon{animation:tmrise .8s cubic-bezier(.2,.8,.2,1) forwards}
-.tm-neon .su{font-size:140px}
-.tm-cmt{font-size:48px;color:#8b949e;line-height:1.6;max-width:920px;margin-top:14px}
+.tm-neon .su{font-size:150px}
+.tm-cmt{font-size:56px;color:#8b949e;line-height:1.55;max-width:920px;margin-top:16px}
 /* code window (shared by code + compare) */
 .tm-win{border:1px solid #20262f;border-radius:16px;background:#0d1117;overflow:hidden;box-shadow:0 36px 90px rgba(0,0,0,.6);
   opacity:0;transform:translateY(26px) scale(.97)}
@@ -183,10 +268,13 @@ html,body{background:#0b0f17;font-family:"Noto Sans Mono CJK SC","DejaVu Sans Mo
 .tm-cl.plus{background:rgba(63,185,80,.14)}.tm-cl.plus .tm-ln,.tm-cl.plus .tm-ct{color:#7ee787}
 .t-kw{color:#ff7b72}.t-str{color:#a5d6ff}.t-cmt{color:#8b949e;font-style:italic}.t-num{color:#79c0ff}.t-fn{color:#d2a8ff}.t-dec{color:#e3b341}
 .tm-codecap{font-size:42px;color:#8b949e;margin-top:28px;opacity:0}.scene.active .tm-codecap{animation:tmf .5s ease forwards .4s}
+/* compare rows read as a headline diff, not source code */
+.cmp .tm-codebody{font-size:64px;line-height:1.4}
+.cmp .tm-cl{white-space:normal;padding:16px 8px}.cmp .tm-ct{white-space:normal}
 /* bullets */
-.tm-bhead{font-size:50px;color:#8b949e;margin-bottom:40px;opacity:0}.scene.active .tm-bhead{animation:tmf .5s ease forwards}
-.tm-list{display:flex;flex-direction:column;gap:34px}
-.tm-li{display:flex;align-items:center;gap:24px;font-size:60px;opacity:0;transform:translateX(-20px)}
+.tm-bhead{font-size:62px;color:#e6edf3;font-weight:700;margin-bottom:44px;opacity:0}.scene.active .tm-bhead{animation:tmf .5s ease forwards}
+.tm-list{display:flex;flex-direction:column;gap:40px}
+.tm-li{display:flex;align-items:center;gap:26px;font-size:74px;opacity:0;transform:translateX(-20px)}
 .scene.active .tm-li{animation:tmslide .5s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:var(--d)}
 .tm-box{color:#8b949e;font-weight:700}.tm-x{color:__ACCENT__}.tm-lt{color:#e6edf3}
 @keyframes tmf{to{opacity:1;transform:none}}

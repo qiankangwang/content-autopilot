@@ -31,6 +31,22 @@ STYLE_PROMPT = (
 )
 
 
+def _strip_watermark(path, frac=0.055):
+    """CogView stamps an「AI生成」badge in the bottom-right corner regardless of
+    the prompt (platform compliance on the free tier). Rendered at cover/fit
+    scale it ends up half-clipped at the frame edge and screams "AI slop"
+    (shipped 2026-07-17/18). Crop the bottom strip off; fails soft."""
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            w, h = im.size
+            cut = int(h * frac)
+            if cut > 0 and h - cut > 200:
+                im.crop((0, 0, w, h - cut)).save(path)
+    except Exception as e:
+        sys.stderr.write(f"[gen_scene_image] watermark crop skipped: {e}\n")
+
+
 def _load_creds():
     for p in CREDS_PATHS:
         if os.path.isfile(p):
@@ -77,6 +93,11 @@ def main():
             img_url = resp["data"][0]["url"]
             with urllib.request.urlopen(img_url, timeout=120) as r, open(args.out, "wb") as f:
                 f.write(r.read())
+            _strip_watermark(args.out)
+            # sidecar marker: the render engine enforces ≤1 AI illustration per
+            # video (user policy 2026-07-19) and needs to know which is which
+            with open(args.out + ".ai", "w") as f:
+                f.write("ai-generated\n")
             print(f"[gen_scene_image] wrote {args.out} (model={args.model})")
             return 0
         except Exception as e:  # free tier rate limits → brief backoff and retry

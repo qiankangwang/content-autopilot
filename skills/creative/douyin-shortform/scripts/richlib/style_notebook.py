@@ -5,12 +5,20 @@
 The most human, least-AI look: like a real person jotting notes for a friend.
 variant() randomizes paper texture, palette, and a layout per scene type, so two
 notebook videos never look the same. Needs LXGW WenKai (base.ensure_fonts ships it).
+
+2026-07-19 anti-PPT pass (mirrors style_editorial): full-page notebook furniture
+in background() (margin red line + washi tape corners + huge faint doodles),
+15-25% bigger type on every text card, hand-drawn dashed frames on bullets/
+compare, a ghost outlined numeral behind stats, and notebook skins for the base
+.sub subtitle plate and .media-canvas fit backdrop (no more black blur / grey
+pill). No corner branding of any kind (user decision 2026-07-18).
 """
-from .base import Style, esc, big_fs, highlight
+from .base import Style, esc, big_fs, highlight, rgba
 
 _INKS = ["#23262e", "#1d2733", "#2a2320"]
 _ACCENTS = ["#e0533b", "#1f6feb", "#d98a00", "#2f8f5b", "#c0398f"]
 _HILITES = ["#ffe14d", "#ffd23f", "#bdf0a6", "#a8e0ff", "#ffc6dd"]
+_DOODLES = ["✗", "◯", "→", "☆", "?", "△"]
 
 
 def _fill(css, m):
@@ -42,6 +50,10 @@ class NotebookStyle(Style):
             "stat": rng.choice(["ring", "arrow"]),
             "bullets": rng.choice(["sticky", "margin"]),
             "tilt": rng.choice([-2, -1, 1, 2]),
+            # page furniture randomness: which doodles haunt the margins, and
+            # how the corner tape leans — same style, never the same page
+            "doodles": rng.sample(_DOODLES, 3),
+            "tape_tilt": rng.choice([-42, -36, 34, 40]),
         }
 
     def css(self, ctx):
@@ -56,12 +68,32 @@ class NotebookStyle(Style):
         return _fill(_CSS, {
             "__PAPER__": paper, "__INK__": ctx["ink"], "__ACCENT__": ctx["accent"],
             "__HILITE__": ctx["hilite"], "__TILT__": ctx["tilt"],
+            "__TAPE__": rgba(ctx["hilite"], 0.5),
+            "__TAPE_TILT__": ctx["tape_tilt"],
+            "__INK_SOFT__": rgba(ctx["ink"], 0.4),
+            "__INK_GHOST__": rgba(ctx["ink"], 0.09),
+            "__WASH__": rgba(ctx["accent"], 0.10),
+            "__WASH2__": rgba(ctx["accent"], 0.16),
         })
 
+    def background(self, ctx):
+        # full-page notebook furniture (decor, NOT branding): the ruled margin
+        # red line, washi-tape corner stickers, and oversized barely-there
+        # doodles. Fills the dead paper that made text cards read as an
+        # unfinished PPT (2026-07-19 review).
+        d0, d1, d2 = (esc(x) for x in ctx["doodles"])
+        return ('<div class="nb-bg">'
+                '<div class="nb-mline"></div><div class="nb-topline"></div>'
+                '<div class="nb-tapecorner ta"></div><div class="nb-tapecorner tb"></div>'
+                f'<div class="nb-doodle d0">{d0}</div>'
+                f'<div class="nb-doodle d1">{d1}</div>'
+                f'<div class="nb-doodle d2">{d2}</div>'
+                '</div>')
+
     def chrome(self, spec, ctx):
-        # no corner branding text (user decision 2026-07-18); keep the ruled
-        # margin line — it is page decor, not text
-        return '<div class="nb-margin"></div>'
+        # no corner branding text (user decision 2026-07-18); the margin line
+        # moved into background() with the rest of the page furniture
+        return ''
 
     # ── decorations (inline SVG, accent-stroked) ──────────────────────────
     def _circle(self, ctx):
@@ -105,7 +137,8 @@ class NotebookStyle(Style):
 
     def _headline(self, i, sc, ctx, outro=False):
         lines = sc.get("lines", []) or [sc.get("say", "")]
-        fs = big_fs(lines, base=110)
+        # 140 base (was 110): headlines must OWN the page, not float in it
+        fs = big_fs(lines, base=140)
         mode = "underline" if outro else ctx["hook"]
         out = []
         for j, ln in enumerate(lines):
@@ -131,19 +164,23 @@ class NotebookStyle(Style):
         val, unit = esc(raw_val), esc(sc.get("unit", ""))
         label = esc(sc.get("label", ""))
         # size follows the value's length — a fixed 300px wide "9 vs 5" used to
-        # overflow and collide with the label/arrow doodle
+        # overflow and collide with the label/arrow doodle. +15% pass 2026-07-19.
         n = len(raw_val)
-        fs = 300 if n <= 3 else (215 if n <= 5 else (155 if n <= 8 else 115))
+        fs = 340 if n <= 3 else (248 if n <= 5 else (178 if n <= 8 else 132))
         num_style = f'style="font-size:{fs}px"'
+        # ghost numeral: the same value, huge and outline-only, pencilled into
+        # the empty top of the page (kills the blank-card look)
+        gfs = 620 if n <= 3 else (430 if n <= 5 else 300)
+        ghost = f'<div class="nb-ghostnum" style="font-size:{gfs}px">{val}</div>'
         if ctx["stat"] == "ring":
             deco = self._circle(ctx)
-            return (f'<section class="scene nb stat" data-i="{i}"><div class="nb-statwrap">'
+            return (f'<section class="scene nb stat" data-i="{i}">{ghost}<div class="nb-statwrap">'
                     f'<div class="nb-statnum" {num_style}><span class="tx">{val}</span><span class="su">{unit}</span>{deco}</div>'
                     f'<div class="nb-statlabel">{label}</div></div></section>')
         # the swoosh arrow only decorates SHORT values — on wide ones it used to
         # land across the digits and the label
         arrow = self._arrow(ctx) if n <= 3 else ""
-        return (f'<section class="scene nb stat" data-i="{i}"><div class="nb-statwrap">'
+        return (f'<section class="scene nb stat" data-i="{i}">{ghost}<div class="nb-statwrap">'
                 f'<div class="nb-statnum" {num_style}><span class="tx">{val}</span><span class="su">{unit}</span></div>'
                 f'{arrow}<div class="nb-statlabel">{label}</div></div></section>')
 
@@ -155,14 +192,17 @@ class NotebookStyle(Style):
                 f'<div class="nb-paper"><div class="nb-code">{body}</div></div>{cap}</section>')
 
     def _compare(self, i, sc, ctx):
-        return (f'<section class="scene nb cmp" data-i="{i}">'
+        # rows live inside a hand-drawn dashed frame now — a taped-in注记框,
+        # not two lines lost on an empty page
+        return (f'<section class="scene nb cmp" data-i="{i}"><div class="nb-cmpbox">'
                 f'<div class="nb-row bad"><span class="x">✕</span><span>{esc(sc.get("before",""))}</span></div>'
                 f'<svg class="nb-div" viewBox="0 0 700 30" preserveAspectRatio="none"><path d="M8,16 C200,6 480,24 692,12" '
                 f'fill="none" stroke="{ctx["ink"]}" stroke-width="3" stroke-dasharray="2 12" stroke-linecap="round"/></svg>'
-                f'<div class="nb-row good">{self._check(ctx)}<span>{esc(sc.get("after",""))}</span></div></section>')
+                f'<div class="nb-row good">{self._check(ctx)}<span>{esc(sc.get("after",""))}</span></div></div></section>')
 
     def _bullets(self, i, sc, ctx):
-        head = f'<div class="nb-bhead">{esc(sc["head"])}</div>' if sc.get("head") else ""
+        head = (f'<div class="nb-bhead"><span class="tx">{esc(sc["head"])}</span>{self._underline(ctx)}</div>'
+                if sc.get("head") else "")
         items = "".join(
             f'<div class="nb-li" style="--d:{0.12*j:.2f}s">{self._check(ctx)}<span>{esc(x)}</span></div>'
             for j, x in enumerate(sc.get("lines", [])))
@@ -174,12 +214,31 @@ _CSS = r"""
 html,body{__PAPER__;font-family:"LXGW WenKai","LXGW WenKai GB","KaiTi","Kaiti SC",serif;color:__INK__}
 .bar{background:__ACCENT__;height:10px;opacity:.85}
 .scene.nb{padding:0 70px}
-.nb-margin{position:absolute;top:0;bottom:0;left:104px;width:3px;background:#f3b0a6;opacity:.5;z-index:1}
-.nb-label{position:absolute;top:74px;left:70px;z-index:6;font-weight:700;font-size:38px;color:__ACCENT__;transform:rotate(-2deg)}
-.nb-handle{position:absolute;bottom:74px;right:70px;z-index:6;font-weight:700;font-size:34px;color:__INK__;transform:rotate(-3deg)}
+/* ── page furniture (background layer, behind every scene) ── */
+.nb-bg{position:absolute;inset:0;z-index:0;pointer-events:none}
+.nb-mline{position:absolute;top:0;bottom:0;left:104px;width:3px;background:#f3b0a6;opacity:.55}
+.nb-topline{position:absolute;left:0;right:0;top:150px;height:2px;background:#f3b0a6;opacity:.35}
+.nb-tapecorner{position:absolute;width:280px;height:60px;background:__TAPE__;
+  box-shadow:0 3px 10px rgba(0,0,0,.08)}
+.nb-tapecorner.ta{top:64px;left:-70px;transform:rotate(__TAPE_TILT__deg)}
+.nb-tapecorner.tb{bottom:210px;right:-76px;transform:rotate(calc(__TAPE_TILT__deg * -1))}
+.nb-doodle{position:absolute;font-weight:700;line-height:1;color:rgba(0,0,0,.045)}
+.nb-doodle.d0{top:96px;right:-40px;font-size:560px;transform:rotate(12deg)}
+.nb-doodle.d1{top:44%;left:-90px;font-size:420px;transform:rotate(-14deg)}
+.nb-doodle.d2{bottom:120px;right:60px;font-size:340px;transform:rotate(8deg)}
+/* ── base-layer skins ── */
+/* subtitles: deep-ink plate + washi-tape accent base (keeps base white fill +
+   dark text-stroke for readability; kills the disconnected grey pill) */
+.sub{background:rgba(24,26,33,.92);border-radius:14px;
+  border-bottom:8px solid __TAPE__}
+/* media fit canvas: the notebook paper shows through with a soft accent wash —
+   no more blurred-black fill */
+.media-canvas{background:linear-gradient(180deg,__WASH__,transparent 26%,
+  transparent 66%,__WASH2__)}
+.media-fit,.media-fitpos{border-radius:10px}
 .deco{position:absolute;overflow:visible;pointer-events:none}
 .nb-stack{position:relative}
-.nb-eyebrow{font-size:40px;color:__ACCENT__;font-weight:700;margin-bottom:24px;transform:rotate(-1deg);opacity:0}
+.nb-eyebrow{font-size:48px;color:__ACCENT__;font-weight:700;margin-bottom:26px;transform:rotate(-1deg);opacity:0}
 .scene.active .nb-eyebrow{animation:nbf .5s ease forwards}
 .nb-h{position:relative;font-weight:700;line-height:1.2;letter-spacing:1px;opacity:0;transform:translateY(16px);display:block;width:max-content;max-width:940px}
 .nb-h .tx{position:relative;z-index:2}
@@ -194,14 +253,17 @@ html,body{__PAPER__;font-family:"LXGW WenKai","LXGW WenKai GB","KaiTi","Kaiti SC
 .nb-h.ul .uline path{stroke-dasharray:1300;stroke-dashoffset:1300}
 .scene.active .nb-h.ul .uline path{animation:draw .7s ease forwards .25s}
 /* stat */
-.nb-statwrap{position:relative}
-.nb-statnum{position:relative;font-weight:700;font-size:300px;line-height:.95;color:__ACCENT__;width:max-content;max-width:940px}
+.nb-ghostnum{position:absolute;top:110px;right:26px;font-weight:700;line-height:1;
+  color:transparent;-webkit-text-stroke:3px __INK_GHOST__;letter-spacing:-6px;
+  pointer-events:none;z-index:0}
+.nb-statwrap{position:relative;z-index:2}
+.nb-statnum{position:relative;font-weight:700;font-size:340px;line-height:.95;color:__ACCENT__;width:max-content;max-width:940px}
 .nb-statnum .su{font-size:.44em}
 .nb-statnum .tx{position:relative;z-index:2}
 .nb-statnum .ring{left:-50px;top:-30px;width:calc(100% + 110px);height:calc(100% + 70px)}
 .nb-statnum .ring path{stroke-dasharray:1600;stroke-dashoffset:1600}
 .scene.active .nb-statnum .ring path{animation:draw .9s ease forwards .3s}
-.nb-statlabel{font-size:60px;margin-top:38px;color:__INK__;position:relative;z-index:3;max-width:940px;line-height:1.35}
+.nb-statlabel{font-size:70px;margin-top:38px;color:__INK__;position:relative;z-index:3;max-width:940px;line-height:1.35}
 .harrow{left:calc(100% - 320px);top:-40px}
 /* code: a printout taped into the notebook */
 .nb-tape{position:absolute;top:96px;left:50%;width:200px;height:50px;margin-left:-100px;background:rgba(243,214,99,.6);transform:rotate(-3deg);z-index:5}
@@ -211,30 +273,40 @@ html,body{__PAPER__;font-family:"LXGW WenKai","LXGW WenKai GB","KaiTi","Kaiti SC
 .t-kw{color:#b5256b;font-weight:700}.t-str{color:#2f8f5b}.t-cmt{color:#9a948a;font-style:italic}.t-num{color:#c0398f}.t-fn{color:#1f6feb}.t-dec{color:#d98a00}
 .nb-anno{display:flex;align-items:center;gap:14px;margin-top:30px;color:__ACCENT__;font-size:46px;transform:rotate(-1.5deg)}
 .aarrow{width:120px;height:90px}
-/* compare */
-.scene.nb.cmp{gap:44px}
-.nb-row{display:flex;align-items:center;gap:28px;font-size:76px;opacity:0;transform:translateX(-30px)}
+/* compare: rows inside a hand-drawn dashed frame */
+.nb-cmpbox{display:flex;flex-direction:column;gap:44px;border:3px dashed __INK_SOFT__;
+  border-radius:22px;padding:66px 58px;margin:0 4px;transform:rotate(-.6deg);
+  background:rgba(255,255,255,.45)}
+.nb-row{display:flex;align-items:center;gap:28px;font-size:88px;opacity:0;transform:translateX(-30px)}
 .scene.active .nb-row{animation:nbslide .55s cubic-bezier(.2,.7,.2,1) forwards}
 .scene.active .nb-row.good{animation-delay:.22s}
-.nb-row.bad{color:#9a948a}.nb-row .x{color:#c2553f;font-size:54px}
-.nb-row .ck{width:58px;height:58px}
+.nb-row.bad{color:#9a948a}.nb-row .x{color:#c2553f;font-size:62px}
+.nb-row .ck{width:66px;height:66px}
 .nb-div{width:100%;height:30px;opacity:0}.scene.active .nb-div{animation:nbf .4s ease forwards .15s}
 /* bullets */
-.nb-bhead{font-size:54px;color:__ACCENT__;font-weight:700;margin-bottom:40px;transform:rotate(-1deg);opacity:0}
+.nb-bhead{position:relative;font-size:88px;color:__ACCENT__;font-weight:700;margin-bottom:52px;transform:rotate(-1deg);opacity:0;width:max-content;max-width:940px}
+.nb-bhead .tx{position:relative;z-index:2}
+.nb-bhead .uline{left:-4px;bottom:-20px;width:104%;height:30px}
+.nb-bhead .uline path{stroke-dasharray:1300;stroke-dashoffset:1300}
+.scene.active .nb-bhead .uline path{animation:draw .7s ease forwards .3s}
 .scene.active .nb-bhead{animation:nbf .5s ease forwards}
-.nb-sticky{background:#fff7d2;padding:46px 52px;box-shadow:4px 8px 18px rgba(0,0,0,.14);transform:rotate(-1.5deg);align-self:flex-start;max-width:840px}
-.nb-list{display:flex;flex-direction:column;gap:36px}
-.nb-li{display:flex;align-items:center;gap:24px;font-size:58px;line-height:1.4;opacity:0;transform:translateY(20px)}
+.nb-sticky{background:#fff7d2;padding:56px 58px;box-shadow:4px 8px 18px rgba(0,0,0,.14);transform:rotate(-1.5deg);align-self:flex-start;max-width:900px;
+  display:flex;flex-direction:column;gap:40px}
+.nb-list{display:flex;flex-direction:column;gap:40px;border:3px dashed __INK_SOFT__;
+  border-radius:18px;padding:52px 48px;transform:rotate(-.4deg)}
+.nb-li{display:flex;align-items:center;gap:26px;font-size:72px;line-height:1.35;opacity:0;transform:translateY(20px)}
 .scene.active .nb-li{animation:nbf .5s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:var(--d)}
-.nb-li .ck{width:56px;height:56px;min-width:56px}
+.nb-li .ck{width:64px;height:64px;min-width:64px}
 .ck path{stroke-dasharray:80;stroke-dashoffset:80}.scene.active .ck path{animation:draw .45s ease forwards;animation-delay:calc(var(--d) + .15s)}
-.nb-note{font-size:56px;line-height:1.7;max-width:880px}
+.nb-note{font-size:66px;line-height:1.65;max-width:900px}
 @keyframes nbf{to{opacity:1;transform:none}}
 @keyframes nbslide{to{opacity:1;transform:none}}
 @keyframes mkgrow{to{width:calc(100% + 22px)}}
 @keyframes draw{to{stroke-dashoffset:0}}
 /* cover = first scene: fully drawn, no entrance */
-.scene.nb:first-of-type .nb-h,.scene.nb:first-of-type .nb-eyebrow{opacity:1;transform:none;animation:none}
+.scene.nb:first-of-type .nb-h,.scene.nb:first-of-type .nb-eyebrow,
+.scene.nb:first-of-type .nb-bhead,.scene.nb:first-of-type .nb-li,
+.scene.nb:first-of-type .nb-row,.scene.nb:first-of-type .nb-div{opacity:1;transform:none;animation:none}
 .scene.nb:first-of-type .nb-h.mk::before{width:calc(100% + 22px);animation:none}
-.scene.nb:first-of-type .deco path{stroke-dashoffset:0;animation:none}
+.scene.nb:first-of-type .deco path,.scene.nb:first-of-type .ck path{stroke-dashoffset:0;animation:none}
 """

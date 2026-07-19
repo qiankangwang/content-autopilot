@@ -16,26 +16,31 @@ pinned: true
 
 # Douyin Short-Form Video (rich motion graphics)
 
-⛔ **The PLUMBING is canonical — voice + render + mux are verified working.** The voice
+⛔ **The PLUMBING is canonical — voice + render + mux are verified working**
+(2026-06-18; 2026-06-19 smooth 30fps + clean cover; 2026-06-26 style engine). The voice
 is 豆包/火山 **北京小爷** (NOT Kokoro, NOT edge-tts). The output is **information-dense
 animated motion graphics** (NOT a static gradient slideshow, NOT AI-photo Ken Burns) —
 do not revert those.
 
-🎨 **The LOOK is no longer a single template — it ROTATES.** The visual layer is a
-pluggable **style engine** (`scripts/richlib/`): each render the engine picks one of
-several distinct visual languages — **editorial 杂志 / notebook 手写 / terminal 终端 /
+🎨 **The LOOK is no longer a single template — it ROTATES.** As of 2026-06-26 the visual
+layer is a pluggable **style engine** (`scripts/richlib/`): each render the engine picks
+one of several distinct visual languages — **editorial 杂志 / notebook 手写 / terminal 终端 /
 tabloid 快报 / keynote 聚光** — by topic affinity + anti-repeat, and randomizes palette +
 layout *within* that style. So consecutive videos rarely share a look and two same-style
 videos still differ. **You no longer design the look — you write CONTENT; the engine
-dresses it.** (This replaced the old single dark-keynote skin, which read as 太模板.)
+dresses it.** (This replaced the old single dark-keynote skin the user rejected as 太模板.)
+2026-07-19 density overhaul: every style now fills the frame (structural background
+furniture + bigger type + ghost glyphs — 大片留白 was rejected as 太丑); wide material
+sits on the style's own canvas (no more black blur bars); subtitles and overlay cards
+are skinned per style.
 
 Produce short vertical videos for 抖音 that read like a real person made them. Each beat
 is a designed, kinetic frame voiced by a natural neural voice and auto-synced to it. This
 is what replaced the two old failures:
 
-- ❌ **bare text-on-gradient slideshow + edge-tts/Kokoro** — "不像真人" (robotic voice,
-  flat obvious-AI frames). BANNED.
-- ❌ **CogView AI photos + Ken Burns** (the old `make_video.py`) — plastic "AI图" look. Gone.
+- ❌ **bare text-on-gradient slideshow + edge-tts/Kokoro** — the user rejected this as
+  "不像真人" (robotic voice, flat obvious-AI frames). BANNED.
+- ❌ **CogView AI photos + Ken Burns** (old `make_video.py`) — plastic "AI图" look. Gone.
 - ✅ **rich motion graphics + 北京小爷 natural voice** (this skill) — the approved style.
 
 > Do NOT confuse "kinetic motion graphics" (good, this skill) with "static gradient
@@ -47,14 +52,15 @@ is what replaced the two old failures:
 1. The pipeline is **ONE command**: `scripts/make_rich_video.py --spec spec.json --out <path>`.
    It does everything: voices each phrase with 北京小爷 (prosody-paced), times the slides to the real audio,
    renders the motion graphics, mixes low-volume **background music** under the voice
-   (public-domain tracks in `scripts/assets/bgm/`, auto-rotated; bare narration reads
-   as AI-made), and muxes → a finished 1080x1920 H.264/AAC mp4. Disable bgm only if
-   the content demands it (`--bgm off` or `"bgm": "off"` in the spec).
-2. **Voice = 北京小爷** (`zh_male_beijingxiaoye_moon_bigtts`; 豆包/火山 via
-   `scripts/volc_tts.py`, creds from env or `~/.config/volc_tts.json`). It is
-   the ENGINE DEFAULT — do NOT pass `--voice` (passing the old vivi voice has
-   shipped a wrong-voice video before). NEVER edge-tts, NEVER Kokoro, NEVER
-   faster-whisper. The script handles TTS — you only write the spec.
+   (bundled public-domain tracks, auto-rotated; bare narration reads as AI-made), and
+   muxes → a finished 1080x1920 H.264/AAC mp4. Disable bgm only if the content demands
+   it (`--bgm off` or `"bgm": "off"` in the spec).
+2. **Voice = 北京小爷** (`zh_male_beijingxiaoye_moon_bigtts`, user-approved
+   2026-07-12; 豆包/火山 via `scripts/volc_tts.py`, creds at
+   `/root/.config/volc_tts.json`). It is the ENGINE DEFAULT — do NOT pass
+   `--voice` (passing vivi shipped a wrong female-voice video on 07-13).
+   NEVER edge-tts, NEVER Kokoro, NEVER faster-whisper. The script handles
+   TTS — you only write the spec.
 3. **You write CONTENT, the engine picks the LOOK.** Scene types (hook / stat / code /
    compare / bullets / outro) are a *vocabulary* — carry REAL information (show the code,
    the number, the comparison), and arrange them by a chosen narrative structure (see
@@ -63,9 +69,9 @@ is what replaced the two old failures:
 4. **Don't hand-edit the scripts per video** (`make_rich_video.py`, `volc_tts.py`,
    `richlib/`) — they are the engine. If a build fails, fix your SPEC (text / scene
    fields), not the script. (Force a specific look only via the optional `style` field.)
-5. **No 关注/点赞/三连 CTA** — in 口播 *and* 画面. The outro lands the **content**
-   point; never add a `cta` field and never say "关注我 / 点赞 / 一键三连". (The
-   script strips these as a safety net, but don't author them.)
+5. **No 关注/点赞/三连/收藏 CTA** (user override 2026-06-19) — in 口播 *and* 画面. The
+   outro lands the **content** point; never add a `cta` field and never say "关注我 /
+   点赞 / 一键三连". (The script strips these as a safety net, but don't author them.)
 
 ## How to Run
 
@@ -81,7 +87,7 @@ python "$SKILL_DIR/scripts/make_rich_video.py" \
 
 The engine auto-rotates the look; add `--style editorial|notebook|terminal|tabloid|keynote`
 only to force one. Do NOT pass `--voice` (engine default = 北京小爷). Use
-container paths (`/root/...`), never host paths. The script runs in the container.
+container paths (`/root/...`), never host paths (`D:\...`). The script runs in the container.
 
 ## Spec format
 
@@ -137,29 +143,27 @@ a deck of styled cards is the failure mode, not a style.
    → a slow-scrolling phone-viewport capture of the real page (load lead-in
    auto-trimmed). Use for 1-2 media scenes per video. `--no-scroll` for a
    static hold; mp4 sources also accepted (auto-transcoded).
-2. **Real web video clips**: `python "$SKILL_DIR/scripts/fetch_web_clip.py" --url <video page or mp4 direct link> --out clip2.webm --start 12 --seconds 8`
-   → downloads official/news footage (yt-dlp) and cuts a pipeline-ready webm.
-   Use OFFICIAL material and ALWAYS set a source `caption`; keep cuts ≤10s.
-3. **Screenshots via the browser** (for the remaining media scenes):
-   `browser_navigate` to the page → `browser_screenshot` → `cp` the newest
-   screenshot into your work dir.
-4. **AI illustration fallback** (only when no real material is reachable —
-   never degrade to a text card):
-   `python "$SKILL_DIR/scripts/gen_scene_image.py" --desc "<画面内容一句话>" --out genN.png`
-   → a flat infographic-style vertical illustration (no photorealism, no text).
-5. **Look at each image before using it** — confirm it shows what you'll be
-   saying over it, isn't a cookie banner / 404 / blank page.
-6. Reference in the spec: `{"type":"media","say":"...","video":"/root/.../clip1.webm","caption":"实录 · GitHub"}`
+2. **Screenshots via the browser** (for the remaining media scenes):
+   `browser_navigate` to the page → `browser_screenshot` → the file lands in
+   `/root/.hermes/cache/screenshots/` (visible in your terminal). `cp` the
+   newest file into your work dir, e.g.
+   `cp "$(ls -t /root/.hermes/cache/screenshots/*.png | head -1)" /root/hermes-content/douyin/<date>-<topic>/shot1.png`
+3. Direct image download (`curl -o`) works too when an article has a key image.
+   As a LAST resort (no clip, no screenshot, no downloadable image), generate ONE
+   flat AI illustration: `python "$SKILL_DIR/scripts/gen_scene_image.py" --desc
+   "<画面内容一句话>" --out <工作目录>/genN.png` — **hard cap 1 per video** (the
+   engine refuses more; 2-3 AI images per video read as AI slop, user verdict
+   2026-07-19). The script auto-crops CogView's「AI生成」watermark strip.
+4. **Look at each image before using it** (`vision_analyze`) — confirm it shows
+   what you'll be saying over it, isn't a cookie banner / 404 / blank page /
+   **a full-page wall of article text** (unreadable on a phone; the engine's
+   vision gate rejects text walls — use the article's own figure or a diagram
+   scene instead).
+5. Reference in the spec: `{"type":"media","say":"...","video":"/root/.../clip1.webm","caption":"实录 · GitHub"}`
    or `{"type":"media","say":"...","image":"/root/.../shot1.png","caption":"来源 · 快科技"}`.
    `caption` is a small corner chip (source/label), NOT the narration.
-7. **Explaining 架构/流程/链路? Use a `diagram` scene** instead of bullets — the
+6. **Explaining 架构/流程/链路? Use a `diagram` scene** instead of bullets — the
    nodes and arrows land one by one with the voice.
-
-The engine enforces this: it refuses to render specs with duplicated narration,
-copy-paste cards, more than 3 text cards, two adjacent text cards, or too few
-usable media scenes — and prints a per-scene repair work order. It also runs a
-vision check on media material (login walls / webpage junk / irrelevant images
-are rejected). Fix the spec/material and rerun the same command.
 
 Example (the AI-写测试 reference video):
 
@@ -195,7 +199,7 @@ or it still reads as AI slop.
 
 **Banned AI-tells** (口播 AND 画面) — never use: 「你有没有想过」「在这个 AI 时代」「众所周知」
 「今天给大家分享」「话不多说」「随着…的发展」「不得不说」「家人们」「绝绝子」, and any
-关注/点赞/三连. Run the script through the **humanizer** skill regardless.
+关注/点赞/三连/收藏. Run the script through the **humanizer** skill regardless.
 
 ## Authoring tips (this is where quality comes from)
 
@@ -209,17 +213,18 @@ or it still reads as AI slop.
    total, ~90-130 chars** — 50s reads as draggy; hook in the first ~1.5s), run it
    through the **humanizer** skill to strip AI tells, THEN cut it into 6-10 short
    scene `say` lines.
-2. **Write like a 抖音 up主, not a news anchor** (新闻稿腔不带劲): short spoken
-   sentences, opinions and attitude, rhetorical turns (「结果呢?」「离谱的是」
-   「你猜怎么着」), a new hook-point every ~8s (new fact / reversal / number
-   punch). Open with the conflict or conclusion — ZERO background windup.
+2. **Write like a 抖音 up主, not a news anchor** (user verdict: 新闻稿腔不带劲):
+   short spoken sentences, opinions and attitude, rhetorical turns (「结果呢?」
+   「离谱的是」「你猜怎么着」), a new hook-point every ~8s (new fact / reversal /
+   number punch). Open with the conflict or conclusion — ZERO background windup.
    End on a take that invites comments, not a summary. Banned: 「据报道」「近日」
    「值得注意的是」 and any 新闻联播 phrasing.
-3. **通俗易懂 is a HARD requirement** — write for someone who knows NOTHING
-   about the field; every term must be translated into daily language:
-   「渗透率60%」→「每卖10辆新车,6辆是电车」;「平均车龄 8.2年」→「一辆油车平均
-   开到孩子小学毕业」. Numbers need a reference an ordinary person can feel.
-   Self-check: would your 完全不懂行的朋友 follow every sentence?
+3. **通俗易懂 is a HARD requirement (user verdict 2026-07-13)** — write for
+   someone who knows NOTHING about the field; every term must be translated
+   into daily language: 「渗透率60%」→「每卖10辆新车,6辆是电车」;「平均车龄
+   8.2年」→「一辆油车平均开到孩子小学毕业」. Numbers need a reference an
+   ordinary person can feel. Self-check: would your 完全不懂行的朋友 follow
+   every sentence?
 4. **Pace like an editor, not a slide deck.** Most scenes 2-4s; let ONE scene
    breathe at 5-6s max. Types may repeat or be skipped; never use the same layout
    two scenes in a row. Match the scene type to the content: a number → `stat`,
@@ -236,14 +241,14 @@ or it still reads as AI slop.
 Never put 学校 / 城市 / 年级 / 职位 in the video or narration. Self-label "技术博主" /
 "AI工具玩家". De-identify any personal experience. Full self-check before building.
 
-## Publishing 抖音 = full-auto with honesty gates
+## Publishing 抖音 = full-auto with honesty gates (proven to land 2026-06-26)
 
 The build pipeline is reliable. Full-auto publish HAS landed for real (post confirmed
 live in 作品管理 with plays), but the platform side is flaky (upload binding, content
 pre-check overload) — every step must verify, and every failure must be reported
 honestly. ALWAYS confirm against 作品管理.
 
-When auto-publishing (via **content-publishing** on the logged-in browser session):
+When auto-publishing (via **content-publishing** on the logged-in Camofox session):
 `browser_navigate` the creator upload page →
 `browser_upload(file_paths=[mp4], selector="input[type=file]", verify_text=["上传中","转码中","重新上传"])`
 → **trust the returned `bound` flag**: `bound:false` = the video did NOT register —
@@ -264,7 +269,7 @@ proof (it caused false 已发布 before). Only `published:true` (server saw it i
 ⚠️ **风控 caveats:** 抖音 may demand an SMS code on 发布 — the agent canNOT bypass it;
 report `未确认发布:需短信验证` + screenshot, never loop or fake 已发布. Repeated
 auto-publishing also risks a 风控 logout; if a verify shows logged out, report it
-honestly (a QR re-login then needs the account owner).
+honestly (a QR re-login then needs the user).
 
 ## Verification (before reporting done)
 
@@ -273,7 +278,7 @@ honestly (a QR re-login then needs the account owner).
 1. **Duration + audio:** `ffprobe -v error -show_entries format=duration:stream=codec_type -of default=nw=1 "$OUT"` → ~narration length, both a video and an audio stream.
 2. **Resolution / fps:** 1080x1920, 30fps.
 3. **Looks rich, not bare:** extract 2-3 frames
-   (`ffmpeg -y -ss 3 -i "$OUT" -vframes 1 f.png`) across scenes and inspect them —
-   they must show designed layouts (code card / big number / compare / bullets
+   (`ffmpeg -y -ss 3 -i "$OUT" -vframes 1 f.png`) across scenes and `vision_analyze`
+   them — they must show designed layouts (code card / big number / compare / bullets
    with accent + depth), NOT flat centered text on black. If it looks like the old bare
-   slideshow, the spec is too thin — add `media`/`diagram`/`stat` scenes.
+   slideshow, the spec is too thin — add `code`/`stat`/`compare` scenes.

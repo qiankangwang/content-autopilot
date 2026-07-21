@@ -233,6 +233,21 @@ html,body{width:%(W)dpx;height:%(H)dpx;overflow:hidden;-webkit-font-smoothing:an
   7%%{transform:scale(1.0) translateY(0);animation-timing-function:linear}
   100%%{transform:scale(1.038) translateY(-14px)}
 }
+/* scene-entry transitions (2026-07-22, anti-slideshow): the old cut was a bare
+   crossfade — every boundary looked like a slide deck advancing. Each scene
+   (except the cover) gets one entry move that hands off EXACTLY at sceneLive's
+   0%% transform. Entry animates transform only; opacity stays on the .55s
+   crossfade so the two never fight. */
+.scene.active.tr-rise{animation:trRise .6s cubic-bezier(.2,.8,.25,1) both,sceneLive 16s linear .6s forwards}
+.scene.active.tr-slidel{animation:trSlideL .6s cubic-bezier(.2,.8,.25,1) both,sceneLive 16s linear .6s forwards}
+.scene.active.tr-slider{animation:trSlideR .6s cubic-bezier(.2,.8,.25,1) both,sceneLive 16s linear .6s forwards}
+.scene.active.tr-zoom{animation:trZoom .65s cubic-bezier(.25,.7,.3,1) both,sceneLive 16s linear .65s forwards}
+.scene.active.tr-drop{animation:trDrop .55s cubic-bezier(.2,1.15,.35,1) both,sceneLive 16s linear .55s forwards}
+@keyframes trRise{0%%{transform:scale(1.04) translateY(72px)}100%%{transform:scale(1.018) translateY(8px)}}
+@keyframes trSlideL{0%%{transform:scale(1.06) translateX(84px) translateY(8px)}100%%{transform:scale(1.018) translateX(0) translateY(8px)}}
+@keyframes trSlideR{0%%{transform:scale(1.06) translateX(-84px) translateY(8px)}100%%{transform:scale(1.018) translateX(0) translateY(8px)}}
+@keyframes trZoom{0%%{transform:scale(1.11) translateY(8px)}100%%{transform:scale(1.018) translateY(8px)}}
+@keyframes trDrop{0%%{transform:scale(1.05) translateY(-64px)}100%%{transform:scale(1.018) translateY(8px)}}
 .bar{position:absolute;left:0;bottom:0;height:8px;width:0;z-index:9}
 
 /* ── media scenes: full-bleed real imagery with a Ken Burns move ─────────── */

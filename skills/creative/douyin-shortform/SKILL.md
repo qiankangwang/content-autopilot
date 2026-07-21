@@ -32,7 +32,9 @@ dresses it.** (This replaced the old single dark-keynote skin the user rejected 
 2026-07-19 density overhaul: every style now fills the frame (structural background
 furniture + bigger type + ghost glyphs — 大片留白 was rejected as 太丑); wide material
 sits on the style's own canvas (no more black blur bars); subtitles and overlay cards
-are skinned per style.
+are skinned per style. 2026-07-22 anti-slideshow pass: scene boundaries rotate real
+entry transitions (slide/zoom/rise/drop/cut, engine-assigned — never author these),
+and AI motion b-roll (gen_scene_video.py) can carry beats that have no real footage.
 
 Produce short vertical videos for 抖音 that read like a real person made them. Each beat
 is a designed, kinetic frame voiced by a natural neural voice and auto-synced to it. This
@@ -149,11 +151,15 @@ a deck of styled cards is the failure mode, not a style.
    newest file into your work dir, e.g.
    `cp "$(ls -t /root/.hermes/cache/screenshots/*.png | head -1)" /root/hermes-content/douyin/<date>-<topic>/shot1.png`
 3. Direct image download (`curl -o`) works too when an article has a key image.
-   As a LAST resort (no clip, no screenshot, no downloadable image), generate ONE
-   flat AI illustration: `python "$SKILL_DIR/scripts/gen_scene_image.py" --desc
-   "<画面内容一句话>" --out <工作目录>/genN.png` — **hard cap 1 per video** (the
-   engine refuses more; 2-3 AI images per video read as AI slop, user verdict
-   2026-07-19). The script auto-crops CogView's「AI生成」watermark strip.
+   For abstract/mechanism beats with NO real footage, generate an **AI motion
+   b-roll clip** (documentary-style vertical, consistent grade):
+   `python "$SKILL_DIR/scripts/gen_scene_video.py" --desc "<画面内容一句话>"
+   --out <工作目录>/genN.mp4` → scene `video` field. **Hard cap 4 per video
+   (2-3 recommended)**; generation takes 1-4 min per clip — poll patiently.
+   A STATIC AI illustration (`gen_scene_image.py`, cap **1** per video) is the
+   last resort when motion doesn't fit. Real material always outranks both.
+   Both scripts write `.ai` sidecars the engine uses to enforce the caps;
+   gen_scene_image auto-crops CogView's「AI生成」watermark strip.
 4. **Look at each image before using it** (`vision_analyze`) — confirm it shows
    what you'll be saying over it, isn't a cookie banner / 404 / blank page /
    **a full-page wall of article text** (unreadable on a phone; the engine's

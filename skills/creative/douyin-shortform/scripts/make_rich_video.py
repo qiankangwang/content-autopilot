@@ -129,8 +129,8 @@ def validate_spec(spec):
     if len(text_idx) > 3:
         problems.append(
             f"纯文字卡有 {len(text_idx)} 屏(scene {text_idx}),上限 3 屏。"
-            f"多出来的换成 media(真实素材)或 diagram。找不到素材才用 AI 插画(全片限 1 张):"
-            f"python $SKILL_DIR/scripts/gen_scene_image.py --desc \"<画面内容一句话>\" --out <工作目录>/genN.png")
+            f"多出来的换成 media(真实素材)或 diagram。找不到素材就用 AI 动态空镜(全片≤4段):"
+            f"python $SKILL_DIR/scripts/gen_scene_video.py --desc \"<画面内容一句话>\" --out <工作目录>/genN.mp4")
     for a, b in zip(text_idx, text_idx[1:]):
         if b == a + 1:
             problems.append(f"scene {a} 和 scene {b} 是连续两屏纯文字卡(观众直接划走)。"
@@ -145,21 +145,31 @@ def validate_spec(spec):
         problems.append(
             f"可用的真实素材场景只有 {media_ok} 个(共 {n} 屏),至少要 {need} 个。"
             f"补素材三选一:fetch_web_clip.py(新闻视频) / record_page_clip.py --start-y 700(页面实录) / "
-            f"browser_screenshot;都拿不到就 AI 插画兜底(全片限 1 张):"
-            f"python $SKILL_DIR/scripts/gen_scene_image.py --desc \"<画面内容>\" --out <工作目录>/genN.png "
-            f"然后填进 scene 的 image 字段。")
+            f"browser_screenshot;都拿不到就 AI 动态空镜兜底(全片≤4段):"
+            f"python $SKILL_DIR/scripts/gen_scene_video.py --desc \"<画面内容>\" --out <工作目录>/genN.mp4 "
+            f"然后填进 scene 的 video 字段。")
 
-    # 5. AI illustrations: at most ONE per video (user policy 2026-07-19 — the
-    # 07-17/18 videos leaned on 2-3 CogView images each and read as AI slop).
-    # Detected via the .ai sidecar gen_scene_image writes + the genN.png naming.
-    ai_idx = [i for i, sc in enumerate(scenes) if sc.get("type") == "media" and (
-        os.path.isfile(str(sc.get("image", "")) + ".ai")
-        or os.path.basename(str(sc.get("image", ""))).lower().startswith("gen"))]
-    if len(ai_idx) > 1:
+    # 5. AI material caps (user policy 2026-07-22): STATIC AI images ≤1 (a
+    # deck of CogView stills reads as AI slop) but MOTION b-roll clips
+    # (gen_scene_video) ≤4 — consistent-style motion shots pass as footage.
+    # Detected via the .ai sidecars both generators write + genN.* naming.
+    def _is_ai(path):
+        return bool(path) and (os.path.isfile(str(path) + ".ai")
+                               or os.path.basename(str(path)).lower().startswith("gen"))
+    ai_img = [i for i, sc in enumerate(scenes)
+              if sc.get("type") == "media" and not sc.get("video") and _is_ai(sc.get("image"))]
+    ai_vid = [i for i, sc in enumerate(scenes)
+              if sc.get("type") == "media" and _is_ai(sc.get("video"))]
+    if len(ai_img) > 1:
         problems.append(
-            f"AI 插画用了 {len(ai_idx)} 张(scene {ai_idx}),全片上限 1 张。"
-            f"多出来的换成真实素材(fetch_web_clip / record_page_clip / browser_screenshot),"
-            f"真实素材才是画面的主体,AI 插画只是最后的兜底。")
+            f"静态 AI 插画用了 {len(ai_img)} 张(scene {ai_img}),全片上限 1 张。"
+            f"多出来的换成真实素材,或改用 AI 动态空镜(gen_scene_video.py,全片≤4段):"
+            f"python $SKILL_DIR/scripts/gen_scene_video.py --desc \"<画面一句话>\" --out <工作目录>/genN.mp4")
+    if len(ai_vid) > 4:
+        problems.append(
+            f"AI 动态空镜用了 {len(ai_vid)} 段(scene {ai_vid}),全片上限 4 段(推荐 2-3)。"
+            f"多出来的换成真实素材(fetch_web_clip / record_page_clip / browser_screenshot)——"
+            f"真实素材永远优先,AI 空镜只补没有实拍的抽象/机制段落。")
 
     if problems:
         lines = ["", "[rich] ❌ spec 校验不通过,拒绝出片。按下面逐条修完 spec.json 再重跑同一条命令:"]
@@ -668,8 +678,8 @@ def verify_media(spec):
                 f"       a) 官方/新闻视频: python $SKILL_DIR/scripts/fetch_web_clip.py --url <相关视频页或mp4直链> --out <工作目录>/fix{i}.webm --seconds 8",
                 f"       b) 页面实录:     python $SKILL_DIR/scripts/record_page_clip.py --url <新闻原文/GitHub/官网> --out <工作目录>/fix{i}.webm --seconds 6",
                 f"       c) 已登录浏览器截图: browser_navigate 相关页面 → browser_screenshot → cp 到工作目录",
-                f"       d) 都拿不到 → AI 插画兜底(禁止改成文字卡!全片限 1 张): python $SKILL_DIR/scripts/gen_scene_image.py"
-                f" --desc \"<这一屏该画什么,一句话>\" --out <工作目录>/gen{i}.png",
+                f"       d) 都拿不到 → AI 动态空镜兜底(禁止改成文字卡!全片≤4段): python $SKILL_DIR/scripts/gen_scene_video.py"
+                f" --desc \"<这一屏该画什么,一句话>\" --out <工作目录>/gen{i}.mp4",
                 f"     换好后更新 spec.json 里 scene {i} 的 image/video 字段。",
             ]
         lines += [
@@ -726,6 +736,16 @@ def build_html(spec, durs, out_path="", explicit_style=None, timings=None):
             sc = dict(sc, type="hook",
                       lines=sc.get("lines") or [str(sc.get("caption") or "")[:12] or "…"])
         parts.append(style.scene(i, sc, ctx))
+    # entry transitions (anti-slideshow): every scene except the cover gets a
+    # varied entry move; never the same one twice in a row, hard cuts stay rare
+    _TRS = ["tr-rise", "tr-slidel", "tr-slider", "tr-zoom", "tr-drop", ""]
+    last_tr = None
+    for i in range(1, len(parts)):
+        pool = [t for t in _TRS if t != last_tr]
+        tr = rng.choice(pool)
+        last_tr = tr
+        if tr:
+            parts[i] = parts[i].replace('class="scene', f'class="scene {tr}', 1)
     scenes_html = "\n".join(parts)
     subs_html = base.build_subs_html(scenes, durs, ctx["accent"], timings=timings, pad=PAD) \
         if not spec.get("no_subs") else ""

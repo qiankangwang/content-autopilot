@@ -170,7 +170,7 @@ skills/
 Drop the skills into your Hermes skills directory (it walks the tree recursively):
 
 ```bash
-git clone https://github.com/qiankangwang/content-autopilot.git
+git clone https://github.com/wangkant/content-autopilot.git
 cp -r content-autopilot/skills/* ~/.hermes/skills/
 # (or point HERMES_SKILLS_DIR at the cloned skills/ folder)
 ```

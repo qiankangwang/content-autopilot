@@ -46,9 +46,13 @@ class NotebookStyle(Style):
             "ink": rng.choice(_INKS),
             "hilite": rng.choice(_HILITES),
             "paper": rng.choice(["dot", "ruled", "grid"]),
+            # per-type LAYOUT pools — each is a compositionally distinct page,
+            # not a cosmetic tweak (2026-07-22 「卡片单一」 feedback)
             "hook": rng.choice(["highlight", "circle", "underline"]),
-            "stat": rng.choice(["ring", "arrow"]),
-            "bullets": rng.choice(["sticky", "margin"]),
+            "stat": rng.choice(["ring", "arrow", "boxed"]),
+            "bullets": rng.choice(["sticky", "margin", "numbered"]),
+            "compare": rng.choice(["framed", "pages", "correction"]),
+            "outro": rng.choice(["underline", "tape", "highlight"]),
             "tilt": rng.choice([-2, -1, 1, 2]),
             # page furniture randomness: which doodles haunt the margins, and
             # how the corner tape leans — same style, never the same page
@@ -120,6 +124,14 @@ class NotebookStyle(Style):
         return (f'<svg class="ck" viewBox="0 0 40 40"><path d="M7,22 L17,32 L34,8" fill="none" '
                 f'stroke="{a}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>')
 
+    def _box(self, ctx):
+        # a wobbly hand-drawn rectangle (two overlapping strokes, marker-like)
+        a = ctx["accent"]
+        return (f'<svg class="deco boxd" viewBox="0 0 560 300" preserveAspectRatio="none">'
+                f'<path d="M22,26 C180,14 400,20 540,24 C544,120 540,220 536,278 '
+                f'C360,286 160,282 24,276 C18,180 20,90 22,26 Z" fill="none" '
+                f'stroke="{a}" stroke-width="6" stroke-linecap="round"/></svg>')
+
     def scene(self, i, sc, ctx):
         t = sc.get("type", "point")
         if t in ("hook", "outro"):
@@ -139,7 +151,18 @@ class NotebookStyle(Style):
         lines = sc.get("lines", []) or [sc.get("say", "")]
         # 140 base (was 110): headlines must OWN the page, not float in it
         fs = big_fs(lines, base=140)
-        mode = "underline" if outro else ctx["hook"]
+        if outro and ctx.get("outro") == "tape":
+            # 合上笔记本式: big lines + a washi-tape seal slapped diagonally
+            # across, like closing the notebook on the point
+            body = "".join(f'<div class="nb-h" style="--d:{0.10*j:.2f}s;font-size:{fs}px">'
+                           f'<span class="tx">{esc(ln)}</span></div>' for j, ln in enumerate(lines))
+            return (f'<section class="scene nb hl otape" data-i="{i}">'
+                    f'<div class="nb-stack">{body}</div>'
+                    f'<div class="nb-seal"></div><div class="nb-seal s2"></div></section>')
+        if outro:
+            mode = "highlight" if ctx.get("outro") == "highlight" else "underline"
+        else:
+            mode = ctx["hook"]
         out = []
         for j, ln in enumerate(lines):
             last = (j == len(lines) - 1)
@@ -172,6 +195,13 @@ class NotebookStyle(Style):
         # the empty top of the page (kills the blank-card look)
         gfs = 620 if n <= 3 else (430 if n <= 5 else 300)
         ghost = f'<div class="nb-ghostnum" style="font-size:{gfs}px">{val}</div>'
+        if ctx["stat"] == "boxed":
+            # number pencilled inside a wobbly hand-drawn box, label beneath as
+            # a margin annotation
+            deco = self._box(ctx)
+            return (f'<section class="scene nb stat" data-i="{i}">{ghost}<div class="nb-statwrap">'
+                    f'<div class="nb-statnum boxed" {num_style}><span class="tx">{val}</span><span class="su">{unit}</span>{deco}</div>'
+                    f'<div class="nb-statlabel anno">{label}</div></div></section>')
         if ctx["stat"] == "ring":
             deco = self._circle(ctx)
             return (f'<section class="scene nb stat" data-i="{i}">{ghost}<div class="nb-statwrap">'
@@ -192,17 +222,42 @@ class NotebookStyle(Style):
                 f'<div class="nb-paper"><div class="nb-code">{body}</div></div>{cap}</section>')
 
     def _compare(self, i, sc, ctx):
-        # rows live inside a hand-drawn dashed frame now — a taped-in注记框,
-        # not two lines lost on an empty page
+        before, after = esc(sc.get("before", "")), esc(sc.get("after", ""))
+        mode = ctx.get("compare", "framed")
+        if mode == "pages":
+            # 左右分页: two half-pages with a spiral-binding seam down the middle
+            binding = "".join(f'<span class="nb-ring"></span>' for _ in range(7))
+            return (f'<section class="scene nb cmp pages" data-i="{i}">'
+                    f'<div class="nb-page left"><div class="nb-ptag bad">之前</div>'
+                    f'<div class="nb-ptxt">{before}</div></div>'
+                    f'<div class="nb-binding">{binding}</div>'
+                    f'<div class="nb-page right"><div class="nb-ptag good">之后</div>'
+                    f'<div class="nb-ptxt">{after}</div></div></section>')
+        if mode == "correction":
+            # 订正式: the old value struck out, the new one written above in accent
+            return (f'<section class="scene nb cmp corr" data-i="{i}"><div class="nb-corrwrap">'
+                    f'<div class="nb-corr-new">{self._check(ctx)}<span>{after}</span></div>'
+                    f'<div class="nb-corr-old"><span>{before}</span>'
+                    f'<svg class="nb-strike" viewBox="0 0 700 30" preserveAspectRatio="none">'
+                    f'<path d="M6,18 C200,10 480,24 694,12" fill="none" stroke="#c2553f" '
+                    f'stroke-width="7" stroke-linecap="round"/></svg></div></div></section>')
+        # framed (default): rows inside a hand-drawn dashed frame — a taped-in注记框
         return (f'<section class="scene nb cmp" data-i="{i}"><div class="nb-cmpbox">'
-                f'<div class="nb-row bad"><span class="x">✕</span><span>{esc(sc.get("before",""))}</span></div>'
+                f'<div class="nb-row bad"><span class="x">✕</span><span>{before}</span></div>'
                 f'<svg class="nb-div" viewBox="0 0 700 30" preserveAspectRatio="none"><path d="M8,16 C200,6 480,24 692,12" '
                 f'fill="none" stroke="{ctx["ink"]}" stroke-width="3" stroke-dasharray="2 12" stroke-linecap="round"/></svg>'
-                f'<div class="nb-row good">{self._check(ctx)}<span>{esc(sc.get("after",""))}</span></div></div></section>')
+                f'<div class="nb-row good">{self._check(ctx)}<span>{after}</span></div></div></section>')
 
     def _bullets(self, i, sc, ctx):
         head = (f'<div class="nb-bhead"><span class="tx">{esc(sc["head"])}</span>{self._underline(ctx)}</div>'
                 if sc.get("head") else "")
+        if ctx["bullets"] == "numbered":
+            # 编号清单: hand-circled numerals instead of checkmarks
+            items = "".join(
+                f'<div class="nb-li num" style="--d:{0.12*j:.2f}s">'
+                f'<span class="nb-num">{j+1}</span><span>{esc(x)}</span></div>'
+                for j, x in enumerate(sc.get("lines", [])))
+            return f'<section class="scene nb bul" data-i="{i}">{head}<div class="nb-list numbered">{items}</div></section>'
         items = "".join(
             f'<div class="nb-li" style="--d:{0.12*j:.2f}s">{self._check(ctx)}<span>{esc(x)}</span></div>'
             for j, x in enumerate(sc.get("lines", [])))
@@ -299,6 +354,47 @@ html,body{__PAPER__;font-family:"LXGW WenKai","LXGW WenKai GB","KaiTi","Kaiti SC
 .nb-li .ck{width:64px;height:64px;min-width:64px}
 .ck path{stroke-dasharray:80;stroke-dashoffset:80}.scene.active .ck path{animation:draw .45s ease forwards;animation-delay:calc(var(--d) + .15s)}
 .nb-note{font-size:66px;line-height:1.65;max-width:900px}
+/* stat · boxed: number inside a wobbly hand-drawn rectangle */
+.nb-statnum.boxed{padding:44px 66px}
+.nb-statnum .boxd{left:-10px;top:-8px;width:calc(100% + 20px);height:calc(100% + 16px)}
+.nb-statnum .boxd path{stroke-dasharray:1900;stroke-dashoffset:1900}
+.scene.active .nb-statnum.boxed .boxd path{animation:draw 1s ease forwards .3s}
+.nb-statlabel.anno{transform:rotate(-1.2deg)}
+/* bullets · numbered: hand-circled numerals */
+.nb-list.numbered{gap:44px}
+.nb-li.num{align-items:center}
+.nb-num{display:inline-flex;align-items:center;justify-content:center;min-width:74px;height:74px;
+  border:4px solid __ACCENT__;border-radius:50% 48% 52% 47%;color:__ACCENT__;font-weight:700;
+  font-size:48px;transform:rotate(-3deg)}
+/* compare · pages: two half-pages + spiral binding */
+.scene.nb.cmp.pages{flex-direction:row;align-items:stretch;gap:0;padding:0 60px}
+.nb-page{flex:1;display:flex;flex-direction:column;justify-content:center;padding:60px 44px;opacity:0}
+.nb-page.left{transform:translateX(-24px)}.nb-page.right{transform:translateX(24px)}
+.scene.active .nb-page.left{animation:nbslide .55s cubic-bezier(.2,.7,.2,1) forwards}
+.scene.active .nb-page.right{animation:nbslideR .55s cubic-bezier(.2,.7,.2,1) forwards .18s}
+.nb-ptag{font-size:44px;font-weight:700;margin-bottom:26px;transform:rotate(-1.5deg)}
+.nb-ptag.bad{color:#9a948a}.nb-ptag.good{color:__ACCENT__}
+.nb-ptxt{font-size:78px;line-height:1.3}.nb-page.left .nb-ptxt{color:#9a948a}
+.nb-binding{display:flex;flex-direction:column;justify-content:center;gap:38px;padding:0 10px}
+.nb-ring{width:34px;height:14px;border:3px solid __INK_SOFT__;border-radius:50%;transform:rotate(-8deg)}
+/* compare · correction: struck-out old + accent new above */
+.nb-corrwrap{display:flex;flex-direction:column;gap:52px;padding:40px 54px}
+.nb-corr-new{display:flex;align-items:center;gap:24px;font-size:92px;font-weight:700;color:__ACCENT__;
+  opacity:0;transform:translateY(-16px)}
+.scene.active .nb-corr-new{animation:nbf .5s ease forwards .25s}
+.nb-corr-new .ck{width:70px;height:70px}
+.nb-corr-old{position:relative;font-size:80px;color:#9a948a;width:max-content;max-width:900px;opacity:0}
+.scene.active .nb-corr-old{animation:nbf .5s ease forwards}
+.nb-strike{position:absolute;left:-8px;top:44%;width:104%;height:30px}
+.nb-strike path{stroke-dasharray:1400;stroke-dashoffset:1400}
+.scene.active .nb-corr-old .nb-strike path{animation:draw .55s ease forwards .5s}
+/* outro · tape: washi-tape seal slapped across the closing lines */
+.nb-seal{position:absolute;left:-40px;top:46%;width:640px;height:96px;background:__TAPE__;
+  transform:rotate(-8deg);box-shadow:0 4px 14px rgba(0,0,0,.1);opacity:0}
+.nb-seal.s2{left:auto;right:-60px;top:60%;width:420px;height:76px;transform:rotate(6deg)}
+.scene.active .nb-seal{animation:nbf .5s ease forwards .35s}
+.scene.active .nb-seal.s2{animation:nbf .5s ease forwards .5s}
+@keyframes nbslideR{to{opacity:1;transform:none}}
 @keyframes nbf{to{opacity:1;transform:none}}
 @keyframes nbslide{to{opacity:1;transform:none}}
 @keyframes mkgrow{to{width:calc(100% + 22px)}}
@@ -306,7 +402,10 @@ html,body{__PAPER__;font-family:"LXGW WenKai","LXGW WenKai GB","KaiTi","Kaiti SC
 /* cover = first scene: fully drawn, no entrance */
 .scene.nb:first-of-type .nb-h,.scene.nb:first-of-type .nb-eyebrow,
 .scene.nb:first-of-type .nb-bhead,.scene.nb:first-of-type .nb-li,
-.scene.nb:first-of-type .nb-row,.scene.nb:first-of-type .nb-div{opacity:1;transform:none;animation:none}
+.scene.nb:first-of-type .nb-row,.scene.nb:first-of-type .nb-div,
+.scene.nb:first-of-type .nb-page,.scene.nb:first-of-type .nb-corr-new,
+.scene.nb:first-of-type .nb-corr-old,.scene.nb:first-of-type .nb-seal{opacity:1;transform:none;animation:none}
 .scene.nb:first-of-type .nb-h.mk::before{width:calc(100% + 22px);animation:none}
-.scene.nb:first-of-type .deco path,.scene.nb:first-of-type .ck path{stroke-dashoffset:0;animation:none}
+.scene.nb:first-of-type .deco path,.scene.nb:first-of-type .ck path,
+.scene.nb:first-of-type .nb-strike path{stroke-dashoffset:0;animation:none}
 """

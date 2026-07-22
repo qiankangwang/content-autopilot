@@ -50,10 +50,13 @@ class EditorialStyle(Style):
         paper, ink, accent, sub = rng.choice(_PALETTES)
         return {
             "accent": accent, "paper": paper, "ink": ink, "sub": sub,
-            "hook": rng.choice(["dropcap", "kicker", "pull"]),
-            "stat": rng.choice(["left", "center"]),
-            "bullets": rng.choice(["numbered", "ruled"]),
-            "issue": rng.choice(["第 014 期", "VOL.07", "No.21", "本期特写"]),
+            # per-type LAYOUT pools — each entry is a compositionally distinct
+            # spread, not a cosmetic tweak (2026-07-22 「卡片单一」 feedback)
+            "hook": rng.choice(["dropcap", "kicker", "pull", "masthead"]),
+            "stat": rng.choice(["classic", "bleed", "bar", "quotepage"]),
+            "bullets": rng.choice(["numbered", "ruled", "cards", "toc"]),
+            "compare": rng.choice(["rows", "split", "annot"]),
+            "outro": rng.choice(["endmark", "plate", "quote"]),
         }
 
     def css(self, ctx):
@@ -105,6 +108,19 @@ class EditorialStyle(Style):
                     f'<div class="ed-ghost">{ghost}</div>'
                     f'<div class="ed-quote">“</div><div class="ed-pullwrap">{body}</div>'
                     f'<div class="ed-kickline"><span class="ed-kick">{eb}</span></div></section>')
+        if mode == "masthead":
+            # 版头式: full-width accent band up top (kicker reversed on it),
+            # headline set flush-left and BLEEDING off the left edge, closed by
+            # a heavy double rule — front-page energy, not a centered card
+            body = "".join(
+                f'<div class="ed-h1" style="--d:{0.10*j:.2f}s;font-size:{int(fs*1.05)}px">{esc(x)}</div>'
+                for j, x in enumerate(lines))
+            return (f'<section class="scene ed hook mast" data-i="{i}">'
+                    f'<div class="ed-ghost bottom">{ghost}</div>'
+                    f'<div class="ed-mastband"><span class="ed-mastkick">{eb}</span>'
+                    f'<span class="ed-mastrules"></span></div>'
+                    f'<div class="ed-mastwrap">{body}<div class="ed-mastrule"></div></div>'
+                    f'</section>')
         head = []
         for j, x in enumerate(lines):
             cls = "ed-h1"
@@ -122,6 +138,29 @@ class EditorialStyle(Style):
 
     def _outro(self, i, sc, ctx):
         lines = sc.get("lines", []) or [sc.get("say", "")]
+        mode = ctx["outro"]
+        if mode == "plate":
+            # full-bleed accent plate, copy reversed in paper, double paper
+            # rules + a circled 完 end-mark (classic magazine colophon device)
+            fs = big_fs(lines, base=118)
+            body = "".join(f'<div class="ed-ph1" style="--d:{0.10*j:.2f}s;font-size:{fs}px">{esc(x)}</div>'
+                           for j, x in enumerate(lines))
+            return (f'<section class="scene ed outro plate" data-i="{i}">'
+                    f'<div class="ed-plate"></div>'
+                    f'<div class="ed-platewrap"><div class="ed-platerule"></div>'
+                    f'{body}<div class="ed-platerule"></div>'
+                    f'<div class="ed-platemark">完</div></div></section>')
+        if mode == "quote":
+            # 引言收尾: oversized opening quote, italic serif lines, closing
+            # quote set right, then a short attribution rule
+            fs = big_fs(lines, base=112)
+            body = "".join(f'<div class="ed-qh1" style="--d:{0.10*j:.2f}s;font-size:{fs}px">{esc(x)}</div>'
+                           for j, x in enumerate(lines))
+            return (f'<section class="scene ed outro quotefin" data-i="{i}">'
+                    f'<div class="ed-bigquote">「</div>'
+                    f'<div class="ed-qwrap">{body}</div>'
+                    f'<div class="ed-closequote">」</div>'
+                    f'<div class="ed-qattr"></div></section>')
         fs = big_fs(lines, base=124)
         body = "".join(f'<div class="ed-h1" style="--d:{0.10*j:.2f}s;font-size:{fs}px">{esc(x)}</div>' for j, x in enumerate(lines))
         return (f'<section class="scene ed outro" data-i="{i}">'

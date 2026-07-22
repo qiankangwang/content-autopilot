@@ -47,13 +47,17 @@ class TerminalStyle(Style):
         return score
 
     def variant(self, rng):
+        # per-type layout pools — every text-card type has >=3 visibly
+        # different compositions, all chosen from the per-video rng
         return {
             "accent": rng.choice(_ACCENTS),
             "file": rng.choice(_FILES),
             "path": rng.choice(_PATHS),
-            "hook": rng.choice(["prompt", "comment", "tab"]),
-            "stat": rng.choice(["diff", "stdout", "neon"]),
-            "bullets": rng.choice(["checklist", "stdout"]),
+            "hook": rng.choice(["prompt", "comment", "tab", "man", "boot"]),
+            "stat": rng.choice(["diff", "stdout", "neon", "bar"]),
+            "bullets": rng.choice(["checklist", "stdout", "tree", "panes"]),
+            "compare": rng.choice(["diff", "cols", "exit"]),
+            "outro": rng.choice(["commit", "shutdown", "pass"]),
         }
 
     def css(self, ctx):
@@ -112,6 +116,29 @@ class TerminalStyle(Style):
                        for j, x in enumerate(lines))
         eb = esc(sc.get("eyebrow", "")) or "今日头条"
         mode = ctx["hook"]
+        if mode == "man":
+            # man-page composition: NAME/SYNOPSIS structure, headline indented
+            return (f'<section class="scene tm hook man" data-i="{i}">'
+                    f'<div class="tm-ghost">&gt;</div>'
+                    f'<div class="tm-manrow"><span>TODAY(1)</span>'
+                    f'<span>User Commands</span><span>TODAY(1)</span></div>'
+                    f'<div class="tm-mansec">NAME</div>'
+                    f'<div class="tm-manname">today — {eb}</div>'
+                    f'<div class="tm-mansec">SYNOPSIS</div>'
+                    f'<div class="tm-head man-ind">{head}</div>'
+                    f'<div class="tm-mansec">SEE ALSO</div>'
+                    f'<div class="tm-manname">watch(1), read(2)</div></section>')
+        if mode == "boot":
+            # boot-splash composition: framed headline box + [ OK ] boot lines
+            return (f'<section class="scene tm hook boot" data-i="{i}">'
+                    f'<div class="tm-ghost">&gt;</div>'
+                    f'<div class="tm-bootbox"><div class="tm-bootlab">{eb}</div>'
+                    f'<div class="tm-head">{head}</div></div>'
+                    f'<div class="tm-bootseq">'
+                    f'<div class="tm-bootline" style="--d:.15s">[ <span class="ok">OK</span> ] mounted /topic</div>'
+                    f'<div class="tm-bootline" style="--d:.32s">[ <span class="ok">OK</span> ] loaded 3 modules</div>'
+                    f'<div class="tm-bootver">tty1 · boot v2.6 · press any key to continue</div>'
+                    f'</div></section>')
         if mode == "comment":
             top = (f'<div class="tm-pp">$ cat hook.md</div>'
                    f'<div class="tm-banner">/* {eb} */</div>')
@@ -131,6 +158,26 @@ class TerminalStyle(Style):
         fs = big_fs(lines, base=118)
         head = "".join(f'<div class="tm-h" style="--d:{0.10*j:.2f}s;font-size:{fs}px">{esc(x)}</div>'
                        for j, x in enumerate(lines))
+        mode = ctx["outro"]
+        if mode == "shutdown":
+            # logout sequence: headline, then the session winds down line by line
+            return (f'<section class="scene tm outro" data-i="{i}">'
+                    f'<div class="tm-ghost bottom">_</div>'
+                    f'<div class="tm-prompt">$ logout<span class="cur"></span></div>'
+                    f'<div class="tm-head">{head}</div>'
+                    f'<div class="tm-shseq">'
+                    f'<div class="tm-shline" style="--d:.25s">Saving session... done</div>'
+                    f'<div class="tm-shline" style="--d:.50s">Connection closed.</div>'
+                    f'<div class="tm-shline" style="--d:.75s">[ process completed ]</div>'
+                    f'</div></section>')
+        if mode == "pass":
+            # test-suite-all-green composition: dots, headline, PASSED rule
+            return (f'<section class="scene tm outro" data-i="{i}">'
+                    f'<div class="tm-ghost bottom">✓</div>'
+                    f'<div class="tm-pp">$ pytest -q</div>'
+                    f'<div class="tm-passdots">.........</div>'
+                    f'<div class="tm-head">{head}</div>'
+                    f'<div class="tm-passbar">═════ all checks PASSED ═════</div></section>')
         return (f'<section class="scene tm outro" data-i="{i}">'
                 f'<div class="tm-ghost bottom">_</div>'
                 f'<div class="tm-prompt">$ git commit -m<span class="cur"></span></div>'
@@ -146,6 +193,24 @@ class TerminalStyle(Style):
                     f'<div class="tm-difflines">'
                     f'<div class="tm-d minus">- 老办法</div>'
                     f'<div class="tm-d plus">+ {label} <span class="tm-big">{val}{unit}</span></div></div></section>')
+        if m == "bar":
+            # htop/meter composition: label + big value + ASCII progress bar
+            raw = str(sc.get("value", ""))
+            num = "".join(ch for ch in raw if ch.isdigit() or ch == ".")
+            try:
+                v = float(num)
+            except ValueError:
+                v = 70.0
+            frac = v / 100.0 if (("%" in raw or "％" in raw) and 0 < v <= 100) else 0.72
+            cells = 18
+            fill = max(1, min(cells, round(frac * cells)))
+            bar = ('<span class="bf">' + "█" * fill + '</span>'
+                   '<span class="be">' + "░" * (cells - fill) + '</span>')
+            return (f'<section class="scene tm stat" data-i="{i}">{ghost}'
+                    f'<div class="tm-pp">$ top -n 1</div>'
+                    f'<div class="tm-meter"><div class="tm-mlab">{label}</div>'
+                    f'<div class="tm-mval">{val}<span class="su">{unit}</span></div>'
+                    f'<div class="tm-mbar">[{bar}]</div></div></section>')
         if m == "stdout":
             return (f'<section class="scene tm stat" data-i="{i}">{ghost}'
                     f'<div class="tm-prompt">$ cat stats.log<span class="cur"></span></div>'
@@ -166,6 +231,30 @@ class TerminalStyle(Style):
                 f'<div class="tm-codebody">{body}</div></div>{cap}</section>')
 
     def _compare(self, i, sc, ctx):
+        before, after = esc(sc.get("before", "")), esc(sc.get("after", ""))
+        mode = ctx["compare"]
+        if mode == "cols":
+            # diff -u two-panel composition: red old panel vs green new panel
+            return (f'<section class="scene tm cmp" data-i="{i}">'
+                    f'<div class="tm-ghost">$</div>'
+                    f'<div class="tm-pp">$ diff -u old new</div>'
+                    f'<div class="tm-cols">'
+                    f'<div class="tm-col minusc"><div class="tm-colhead">--- a/old</div>'
+                    f'<div class="tm-coltext">{before}</div></div>'
+                    f'<div class="tm-col plusc"><div class="tm-colhead">+++ b/new</div>'
+                    f'<div class="tm-coltext">{after}</div></div></div></section>')
+        if mode == "exit":
+            # exit-code composition: red error block -> green pass block
+            return (f'<section class="scene tm cmp" data-i="{i}">'
+                    f'<div class="tm-ghost">!</div>'
+                    f'<div class="tm-pp">$ ./run.sh</div>'
+                    f'<div class="tm-ex bad"><div class="tm-exhead">✗ 报错</div>'
+                    f'<div class="tm-extext">{before}</div>'
+                    f'<div class="tm-excode">exit 1</div></div>'
+                    f'<div class="tm-exarr">↓ 修复</div>'
+                    f'<div class="tm-ex good"><div class="tm-exhead">✓ 通过</div>'
+                    f'<div class="tm-extext">{after}</div>'
+                    f'<div class="tm-excode">exit 0</div></div></section>')
         return (f'<section class="scene tm cmp" data-i="{i}">'
                 f'<div class="tm-ghost">$</div>'
                 f'<div class="tm-pp">$ git diff</div>'
@@ -178,7 +267,30 @@ class TerminalStyle(Style):
     def _bullets(self, i, sc, ctx):
         head = f'<div class="tm-bhead"># {esc(sc["head"])}</div>' if sc.get("head") else ""
         rows = sc.get("lines", [])
-        if ctx["bullets"] == "checklist":
+        mode = ctx["bullets"]
+        if mode == "tree":
+            # tree-command composition: head is the root dir, items branch off
+            root = esc(sc.get("head", "")) or "notes/"
+            items = "".join(
+                f'<div class="tm-li" style="--d:{0.12*j:.2f}s">'
+                f'<span class="tm-treepre">{"└── " if j == len(rows) - 1 else "├── "}</span>'
+                f'<span class="tm-lt">{esc(x)}</span></div>' for j, x in enumerate(rows))
+            return (f'<section class="scene tm bul" data-i="{i}">'
+                    f'<div class="tm-ghost">#</div>'
+                    f'<div class="tm-pp">$ tree . -L 1</div>'
+                    f'<div class="tm-troot">{root}</div>'
+                    f'<div class="tm-list tree">{items}</div></section>')
+        if mode == "panes":
+            # tmux-split composition: every item lives in its own pane frame
+            panes = "".join(
+                f'<div class="tm-pane" style="--d:{0.14*j:.2f}s">'
+                f'<span class="tm-panetag">{j}</span>'
+                f'<span class="tm-lt">{esc(x)}</span></div>' for j, x in enumerate(rows))
+            return (f'<section class="scene tm bul" data-i="{i}">'
+                    f'<div class="tm-ghost">#</div>'
+                    f'<div class="tm-pp">$ tmux attach</div>'
+                    f'{head}<div class="tm-panes">{panes}</div></section>')
+        if mode == "checklist":
             pp = '<div class="tm-pp">$ cat todo.md</div>'
             items = "".join(f'<div class="tm-li" style="--d:{0.12*j:.2f}s"><span class="tm-box">[<span class="tm-x">x</span>]</span>'
                             f'<span class="tm-lt">{esc(x)}</span></div>' for j, x in enumerate(rows))
@@ -240,6 +352,25 @@ html,body{background:#0b0f17;font-family:"Noto Sans Mono CJK SC","DejaVu Sans Mo
 .tm-h{font-family:"Noto Sans CJK SC",sans-serif;font-weight:900;line-height:1.12;color:#e6edf3;opacity:0;transform:translateY(20px)}
 .scene.active .tm-h{animation:tmrise .6s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:var(--d)}
 .tm-h:last-of-type{color:__ACCENT__}
+/* hook: man-page layout */
+.tm-manrow{display:flex;justify-content:space-between;font-size:32px;color:#57606a;margin-bottom:36px;opacity:0}
+.scene.active .tm-manrow{animation:tmf .5s ease forwards}
+.tm-mansec{font-size:34px;letter-spacing:6px;color:__ACCENT__;margin:32px 0 14px;opacity:0}
+.scene.active .tm-mansec{animation:tmf .5s ease forwards .1s}
+.tm-manname{font-size:44px;color:#8b949e;padding-left:48px;opacity:0}
+.scene.active .tm-manname{animation:tmf .5s ease forwards .18s}
+.tm-head.man-ind{padding-left:48px;margin-top:8px}
+/* hook: boot-splash layout */
+.tm-bootbox{position:relative;border:3px solid #30363d;border-radius:18px;padding:60px 46px 50px;
+  box-shadow:inset 0 0 70px rgba(0,0,0,.4);opacity:0;transform:translateY(20px)}
+.scene.active .tm-bootbox{animation:tmrise .6s cubic-bezier(.2,.7,.2,1) forwards}
+.tm-bootlab{position:absolute;top:-26px;left:38px;background:#0b0f17;padding:0 18px;
+  font-size:34px;color:__ACCENT__;letter-spacing:4px}
+.tm-bootseq{margin-top:46px;font-size:34px;line-height:1.9;color:#57606a}
+.tm-bootline{opacity:0}.scene.active .tm-bootline{animation:tmf .4s ease forwards;animation-delay:var(--d)}
+.tm-bootline .ok{color:#7ee787}
+.tm-bootver{margin-top:12px;font-size:28px;color:#3d444d;opacity:0}
+.scene.active .tm-bootver{animation:tmf .4s ease forwards .55s}
 /* stat */
 .tm-difflines{font-size:78px;font-weight:700}
 .tm-d{padding:20px 32px;border-radius:10px;opacity:0;transform:translateX(-26px)}
@@ -253,6 +384,15 @@ html,body{background:#0b0f17;font-family:"Noto Sans Mono CJK SC","DejaVu Sans Mo
 .scene.active .tm-neon{animation:tmrise .8s cubic-bezier(.2,.8,.2,1) forwards}
 .tm-neon .su{font-size:150px}
 .tm-cmt{font-size:56px;color:#8b949e;line-height:1.55;max-width:920px;margin-top:16px}
+/* stat: htop/meter layout */
+.tm-meter{opacity:0;transform:translateY(22px)}
+.scene.active .tm-meter{animation:tmrise .6s cubic-bezier(.2,.7,.2,1) forwards}
+.tm-mlab{font-size:56px;color:#8b949e;margin-bottom:10px}
+.tm-mval{font-family:"Noto Sans CJK SC",sans-serif;font-weight:900;font-size:220px;line-height:1;color:__ACCENT__}
+.tm-mval .su{font-size:96px}
+.tm-mbar{font-size:58px;margin-top:28px;color:#3d444d;letter-spacing:2px}
+.tm-mbar .bf{color:__ACCENT__;text-shadow:0 0 24px __GLOW__}
+.tm-mbar .be{color:#242b36}
 /* code window (shared by code + compare) */
 .tm-win{border:1px solid #20262f;border-radius:16px;background:#0d1117;overflow:hidden;box-shadow:0 36px 90px rgba(0,0,0,.6);
   opacity:0;transform:translateY(26px) scale(.97)}
@@ -271,6 +411,28 @@ html,body{background:#0b0f17;font-family:"Noto Sans Mono CJK SC","DejaVu Sans Mo
 /* compare rows read as a headline diff, not source code */
 .cmp .tm-codebody{font-size:64px;line-height:1.4}
 .cmp .tm-cl{white-space:normal;padding:16px 8px}.cmp .tm-ct{white-space:normal}
+/* compare: diff -u two-panel layout */
+.tm-cols{display:grid;grid-template-columns:1fr 1fr;gap:30px}
+.tm-col{border-radius:16px;padding:38px 32px;min-height:420px;opacity:0}
+.tm-col.minusc{background:rgba(248,81,73,.10);border:2px solid rgba(248,81,73,.45);transform:translateX(-30px)}
+.tm-col.plusc{background:rgba(63,185,80,.10);border:2px solid rgba(63,185,80,.45);transform:translateX(30px)}
+.scene.active .tm-col{animation:tmslide .55s cubic-bezier(.2,.7,.2,1) forwards}
+.scene.active .tm-col.plusc{animation-delay:.18s}
+.tm-colhead{font-size:36px;margin-bottom:28px}
+.minusc .tm-colhead{color:#f8a39d}.plusc .tm-colhead{color:#7ee787}
+.tm-coltext{font-family:"Noto Sans CJK SC",sans-serif;font-size:56px;line-height:1.5;color:#e6edf3;font-weight:700}
+/* compare: exit-code layout (error block -> pass block) */
+.tm-ex{border-radius:18px;padding:40px 44px;opacity:0;transform:translateY(22px)}
+.scene.active .tm-ex{animation:tmrise .55s cubic-bezier(.2,.7,.2,1) forwards}
+.tm-ex.bad{background:rgba(248,81,73,.12);border-left:12px solid #f85149}
+.tm-ex.good{background:rgba(63,185,80,.12);border-left:12px solid #3fb950}
+.scene.active .tm-ex.good{animation-delay:.35s}
+.tm-exhead{font-size:40px;font-weight:700;margin-bottom:18px}
+.bad .tm-exhead{color:#f8a39d}.good .tm-exhead{color:#7ee787}
+.tm-extext{font-family:"Noto Sans CJK SC",sans-serif;font-size:60px;font-weight:700;line-height:1.45;color:#e6edf3}
+.tm-excode{margin-top:20px;font-size:32px;color:#57606a;text-align:right}
+.tm-exarr{font-size:44px;color:__ACCENT__;margin:26px 0 26px 20px;opacity:0}
+.scene.active .tm-exarr{animation:tmf .4s ease forwards .22s}
 /* bullets */
 .tm-bhead{font-size:62px;color:#e6edf3;font-weight:700;margin-bottom:44px;opacity:0}.scene.active .tm-bhead{animation:tmf .5s ease forwards}
 .tm-list{display:flex;flex-direction:column;gap:40px}

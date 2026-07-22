@@ -48,9 +48,13 @@ class KeynoteStyle(Style):
             "cool": _COOLS.get(accent, "#2E7BFF"),
             "theme": "dark" if rng.random() < 0.72 else "light",
             "glow": rng.random() < 0.85,
-            "hook": rng.choice(["grad", "bar"]),
-            "stat": rng.choice(["left", "center"]),
-            "bullets": rng.choice(["index", "beam"]),
+            # per-type LAYOUT pools — compositionally distinct stage treatments,
+            # not cosmetic (2026-07-22 「卡片单一」 feedback)
+            "hook": rng.choice(["grad", "bar", "spotlight"]),
+            "stat": rng.choice(["left", "center", "arc"]),
+            "bullets": rng.choice(["index", "beam", "timeline"]),
+            "compare": rng.choice(["glass", "stack", "split"]),
+            "outro": rng.choice(["grad", "spotlight", "logobar"]),
             "ghost": rng.choice(_GHOSTS),
         }
 
@@ -98,13 +102,31 @@ class KeynoteStyle(Style):
         t = sc.get("type", "point")
         if t == "hook":
             eb = f'<div class="eyebrow">{esc(sc["eyebrow"])}</div>' if sc.get("eyebrow") else ""
-            grad = ctx.get("hook") == "grad"
+            hmode = ctx.get("hook", "grad")
+            if hmode == "spotlight":
+                # keyword-in-a-light-pool: the last line glows inside a bright
+                # radial spot, the rest recede — a single hero beat
+                return (f'<section class="scene hook spot" data-i="{i}">{eb}'
+                        f'<div class="kn-pool"></div>'
+                        f'<div class="biglines">{_big_lines(sc.get("lines", []), base_fs=158, grad=True)}'
+                        f'</div></section>')
+            grad = hmode == "grad"
             return (f'<section class="scene hook" data-i="{i}">{eb}'
                     f'<div class="biglines">{_big_lines(sc.get("lines", []), base_fs=152, grad=grad)}'
                     f'<div class="accentbar"></div></div></section>')
         if t == "stat":
             val, unit = esc(sc.get("value", "")), esc(sc.get("unit", ""))
-            cls = "scene stat " + ("center" if ctx.get("stat") == "center" else "left")
+            smode = ctx.get("stat", "left")
+            if smode == "arc":
+                # a glowing gauge arc sweeping behind the number
+                return (f'<section class="scene stat arc" data-i="{i}">'
+                        f'<svg class="kn-arc" viewBox="0 0 400 400">'
+                        f'<circle class="arc-bg" cx="200" cy="200" r="176"/>'
+                        f'<circle class="arc-fg" cx="200" cy="200" r="176"/></svg>'
+                        f'<div class="statwrap"><div class="statnum">{val}'
+                        f'<span class="statunit">{unit}</span></div>'
+                        f'<div class="statlabel">{esc(sc.get("label",""))}</div></div></section>')
+            cls = "scene stat " + ("center" if smode == "center" else "left")
             return (f'<section class="{cls}" data-i="{i}">'
                     f'<div class="statghost">{val}</div>'
                     f'<div class="statwrap"><div class="statnum">{val}'
@@ -122,15 +144,46 @@ class KeynoteStyle(Style):
                     f'<span class="dot d3"></span><span class="winlang">{lang}</span></div>'
                     f'<div class="wincode">{body}</div></div>{cap}</section>')
         if t == "compare":
+            before, after = esc(sc.get("before", "")), esc(sc.get("after", ""))
+            cmode = ctx.get("compare", "glass")
+            if cmode == "stack":
+                # 幕布式: the old state recedes (small, dim, struck), the new
+                # one comes forward (large, lit) — depth instead of side-by-side
+                return (f'<section class="scene compare stack" data-i="{i}">'
+                        f'<div class="cmp-old"><span class="cmp-tag">之前</span>'
+                        f'<span class="cmptext">{before}</span></div>'
+                        f'<div class="cmp-new"><span class="cmp-tag">之后</span>'
+                        f'<span class="cmptext">{after}</span></div></section>')
+            if cmode == "split":
+                # left/right split with a glowing center seam
+                return (f'<section class="scene compare split" data-i="{i}">'
+                        f'<div class="cmp-half l"><span class="cmp-tag">之前</span>'
+                        f'<span class="cmptext">{before}</span></div>'
+                        f'<div class="cmp-seam"></div>'
+                        f'<div class="cmp-half r"><span class="cmp-tag">之后</span>'
+                        f'<span class="cmptext">{after}</span></div></section>')
+            # glass (default): two glass panels + stroked VS
             return (f'<section class="scene compare" data-i="{i}">'
                     f'<div class="cmp before"><span class="cmpicon">✕</span>'
-                    f'<span class="cmptext">{esc(sc.get("before",""))}</span></div>'
+                    f'<span class="cmptext">{before}</span></div>'
                     f'<div class="kn-vs">VS</div>'
                     f'<div class="cmp after"><span class="cmpicon">✓</span>'
-                    f'<span class="cmptext">{esc(sc.get("after",""))}</span></div></section>')
+                    f'<span class="cmptext">{after}</span></div></section>')
         if t == "bullets":
             rows = sc.get("lines", [])
-            if ctx.get("bullets") == "index":
+            bmode = ctx.get("bullets", "index")
+            head = (f'<div class="bhead">{esc(sc["head"])}</div><div class="hairbar"></div>'
+                    if sc.get("head") else "")
+            count = f"{len(rows):02d}"
+            if bmode == "timeline":
+                # 时间轴式: a vertical spine with glowing nodes lighting up in turn
+                items = "".join(
+                    f'<div class="titem" style="--d:{0.14*j:.2f}s"><span class="tnode"></span>'
+                    f'<span class="btext">{esc(x)}</span></div>' for j, x in enumerate(rows))
+                return (f'<section class="scene bullets timeline" data-i="{i}">'
+                        f'<div class="kn-count">{count}</div>'
+                        f'{head}<div class="tline"><span class="tspine"></span>{items}</div></section>')
+            if bmode == "index":
                 items = "".join(
                     f'<div class="bitem" style="--d:{0.14*j:.2f}s"><span class="bnum">{j+1:02d}</span>'
                     f'<span class="btext">{esc(x)}</span></div>' for j, x in enumerate(rows))
@@ -138,13 +191,22 @@ class KeynoteStyle(Style):
                 items = "".join(
                     f'<div class="bitem" style="--d:{0.14*j:.2f}s"><span class="bbeam"></span>'
                     f'<span class="btext">{esc(x)}</span></div>' for j, x in enumerate(rows))
-            head = (f'<div class="bhead">{esc(sc["head"])}</div><div class="hairbar"></div>'
-                    if sc.get("head") else "")
-            count = f"{len(rows):02d}"
             return (f'<section class="scene bullets" data-i="{i}">'
                     f'<div class="kn-count">{count}</div>'
                     f'{head}<div class="blist">{items}</div></section>')
         if t == "outro":
+            omode = ctx.get("outro", "grad")
+            if omode == "spotlight":
+                # lights dim to one glowing line in a spot pool
+                return (f'<section class="scene outro spot" data-i="{i}">'
+                        f'<div class="kn-pool"></div>'
+                        f'<div class="biglines">{_big_lines(sc.get("lines", []), base_fs=148, grad=True)}'
+                        f'</div></section>')
+            if omode == "logobar":
+                # big line + a full-width footlight band across the stage floor
+                return (f'<section class="scene outro logobar" data-i="{i}">'
+                        f'<div class="biglines">{_big_lines(sc.get("lines", []), base_fs=144, grad=True)}'
+                        f'</div><div class="kn-footband"></div></section>')
             return (f'<section class="scene outro" data-i="{i}">'
                     f'<div class="biglines">{_big_lines(sc.get("lines", []), base_fs=140, grad=True)}'
                     f'<div class="accentbar"></div></div></section>')
@@ -267,6 +329,63 @@ html,body{background:%(BG)s;font-family:"Noto Sans CJK SC","Source Han Sans SC",
 .bbeam{width:16px;min-width:16px;height:88px;border-radius:8px;
   background:linear-gradient(180deg,%(ACCENT)s,%(COOL)s);box-shadow:0 0 28px %(ASH)s}
 .btext{color:%(FG)s;font-weight:800;font-size:82px;line-height:1.22}
+/* hook/outro · spotlight: hero lines glowing in a bright light pool */
+.kn-pool{position:absolute;left:50%%;top:46%%;transform:translate(-50%%,-50%%);z-index:0;
+  width:1150px;height:860px;pointer-events:none;
+  background:radial-gradient(ellipse 50%% 50%% at 50%% 50%%,%(ADIM)s,transparent 66%%)}
+.scene.spot .big{text-shadow:0 0 60px %(ASH)s}
+/* stat · arc: a glowing gauge sweeping behind the number */
+.scene.stat.arc{justify-content:center;align-items:center}
+.scene.stat.arc .statwrap{text-align:center;position:relative;z-index:2}
+.kn-arc{position:absolute;left:50%%;top:44%%;transform:translate(-50%%,-50%%) rotate(-90deg);
+  width:820px;height:820px;z-index:0;pointer-events:none;overflow:visible}
+.kn-arc .arc-bg{fill:none;stroke:%(STROKE)s;stroke-width:14}
+.kn-arc .arc-fg{fill:none;stroke:%(ACCENT)s;stroke-width:16;stroke-linecap:round;
+  stroke-dasharray:1105;stroke-dashoffset:340;filter:drop-shadow(0 0 20px %(ASH)s)}
+.scene.active .kn-arc .arc-fg{animation:arcdraw 1.1s cubic-bezier(.2,.8,.2,1) forwards .2s}
+@keyframes arcdraw{from{stroke-dashoffset:1105}to{stroke-dashoffset:340}}
+/* compare · stack: old recedes, new comes forward */
+.scene.compare.stack{gap:40px}
+.cmp-old,.cmp-new{border-radius:26px;padding:38px 48px;font-weight:800;opacity:0}
+.cmp-old{font-size:60px;color:%(SUB)s;background:%(GLASS)s;border:1.5px solid %(GLASSBD)s;
+  transform:scale(.86) translateY(-20px)}
+.cmp-old .cmptext{text-decoration:line-through;text-decoration-color:%(SUB)s}
+.cmp-old .cmp-tag{color:%(SUB)s}
+.cmp-new{font-size:92px;color:%(FG)s;background:linear-gradient(135deg,%(ADIM)s,%(GLASS)s);
+  border:1.5px solid %(ASTROKE)s;box-shadow:0 30px 80px rgba(0,0,0,.4),0 0 70px %(ADIM)s}
+.cmp-new .cmp-tag{color:%(ACCENT)s}
+.cmp-tag{display:block;font-size:34px;font-weight:800;letter-spacing:6px;margin-bottom:16px}
+.scene.active .cmp-old{animation:popbig .55s ease forwards .05s}
+.scene.active .cmp-new{animation:popbig .6s cubic-bezier(.2,.8,.2,1) forwards .22s}
+/* compare · split: left/right with a glowing seam */
+.scene.compare.split{flex-direction:row;align-items:stretch;gap:0;padding:0 70px}
+.cmp-half{flex:1;display:flex;flex-direction:column;justify-content:center;padding:56px 44px;
+  font-size:74px;font-weight:800;opacity:0}
+.cmp-half.l{color:%(SUB)s;transform:translateX(-40px)}
+.cmp-half.l .cmptext{text-decoration:line-through;text-decoration-color:%(SUB)s}
+.cmp-half.l .cmp-tag{color:%(SUB)s}
+.cmp-half.r{color:%(FG)s;transform:translateX(40px)}
+.cmp-half.r .cmp-tag{color:%(ACCENT)s}
+.cmp-seam{width:6px;border-radius:4px;align-self:stretch;margin:40px 0;
+  background:linear-gradient(180deg,transparent,%(ACCENT)s,%(COOL)s,transparent);
+  box-shadow:0 0 30px %(ASH)s;opacity:0}
+.scene.active .cmp-half.l{animation:slidex .6s cubic-bezier(.2,.7,.2,1) forwards .05s}
+.scene.active .cmp-half.r{animation:slidex .6s cubic-bezier(.2,.7,.2,1) forwards .2s}
+.scene.active .cmp-seam{animation:rise .5s ease forwards .15s}
+/* bullets · timeline: vertical spine + glowing nodes */
+.tline{position:relative;padding-left:70px}
+.tspine{position:absolute;left:24px;top:20px;bottom:20px;width:5px;border-radius:3px;
+  background:linear-gradient(180deg,%(ACCENT)s,%(COOL)s);box-shadow:0 0 22px %(ASH)s}
+.titem{position:relative;display:flex;align-items:center;padding:34px 0;opacity:0;transform:translateY(26px)}
+.scene.active .titem{animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:var(--d)}
+.tnode{position:absolute;left:-58px;width:30px;height:30px;border-radius:50%%;background:%(ACCENT)s;
+  box-shadow:0 0 24px %(ASH)s,0 0 0 8px %(ADIM)s}
+/* outro · logobar: full-width footlight band */
+.kn-footband{position:absolute;left:0;right:0;bottom:150px;height:20px;z-index:1;width:0;margin:0 auto;
+  background:linear-gradient(90deg,transparent,%(ACCENT)s,%(COOL)s,transparent);
+  box-shadow:0 0 40px %(ASH)s;opacity:.9}
+.scene.active .kn-footband{animation:growband .9s cubic-bezier(.2,.7,.2,1) forwards .3s}
+@keyframes growband{from{width:0}to{width:88%%}}
 @keyframes rise{from{opacity:0;transform:translateY(34px)}to{opacity:1;transform:none}}
 @keyframes grow{to{width:240px}}
 @keyframes growh{to{width:220px}}
@@ -278,7 +397,11 @@ html,body{background:%(BG)s;font-family:"Noto Sans CJK SC","Source Han Sans SC",
 .scene:first-of-type .eyebrow,.scene:first-of-type .big,.scene:first-of-type .statnum,
 .scene:first-of-type .statlabel,.scene:first-of-type .bhead,.scene:first-of-type .bitem,
 .scene:first-of-type .cmp,.scene:first-of-type .kn-vs,.scene:first-of-type .win,
-.scene:first-of-type .codeline,.scene:first-of-type .codecap{opacity:1;transform:none;animation:none}
+.scene:first-of-type .codeline,.scene:first-of-type .codecap,
+.scene:first-of-type .cmp-old,.scene:first-of-type .cmp-new,.scene:first-of-type .cmp-half,
+.scene:first-of-type .cmp-seam,.scene:first-of-type .titem{opacity:1;transform:none;animation:none}
 .scene:first-of-type .accentbar{width:240px;animation:none}
 .scene:first-of-type .hairbar{width:220px;animation:none}
+.scene:first-of-type .kn-arc .arc-fg{stroke-dashoffset:340;animation:none}
+.scene:first-of-type .kn-footband{width:88%%;animation:none}
 """

@@ -123,6 +123,16 @@ when there's no number or `code` when it's not a code story:
 white bottom-third subtitles (numbers auto-highlighted), phrase by phrase in sync
 with the voice. Don't put the narration on the slides; the subs carry it.
 
+### Two assembly forms (pick per topic before writing scenes)
+
+- **Footage-flow** (events/society/lifestyle/macro topics — the dominant form
+  of today's viral AI-made shorts): nearly every spoken line rides a MOVING
+  real shot (news clip / stock footage, cut every 2-5s), media scenes ≥70%,
+  text cards limited to the hook + at most one stat punch; mechanism beats
+  still use `diagram`. The subtitle layer carries the words.
+- **Card-mix** (code/data/mechanism-heavy tech topics): the original mixed
+  assembly below, media ≥ half.
+
 ### Assemble freely — content decides the mix (NOT a template)
 
 The scene types are LEGO bricks: real footage, page recordings, screenshots,

@@ -883,6 +883,8 @@ def main():
                     help="background music: auto (rotate bundled PD tracks) | off | a track name/path")
     ap.add_argument("--skip-verify", action="store_true",
                     help="bypass the media vision gate (debug only)")
+    ap.add_argument("--no-grade", action="store_true",
+                    help="skip the cinematic finishing grade (grain/vignette/tone)")
     ap.add_argument("--no-audio", action="store_true", help="render silent (debug)")
     ap.add_argument("--dump-html", default=None, help="also write the rendered HTML here (debug)")
     args = ap.parse_args()
@@ -959,7 +961,16 @@ def main():
                 "-c:a", "aac", "-b:a", "192k", "-shortest"]
     else:
         cmd += ["-map", "0:v", "-an"]
-    cmd += ["-vf", f"scale={W}:{H},format=yuv420p",
+    # cinematic finishing grade (2026-07-22): subtle film grain + soft vignette
+    # + a light teal-orange tone pulls mixed sources (recordings, screenshots,
+    # stock, AI clips) into ONE color world — the patchwork feel was a big part
+    # of "not quite professional". Kept subtle on purpose; --no-grade to A/B.
+    grade = ("" if args.no_grade else
+             ",eq=contrast=1.03:saturation=1.05"
+             ",colorbalance=rs=.025:bs=-.02:rh=-.02:bh=.025"
+             ",vignette=angle=PI/6"
+             ",noise=alls=5:allf=t+u")
+    cmd += ["-vf", f"scale={W}:{H}{grade},format=yuv420p",
             "-c:v", "libx264", "-preset", "medium", "-crf", "19", args.out]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:

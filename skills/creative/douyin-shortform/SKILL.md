@@ -35,6 +35,9 @@ sits on the style's own canvas (no more black blur bars); subtitles and overlay 
 are skinned per style. 2026-07-22 anti-slideshow pass: scene boundaries rotate real
 entry transitions (slide/zoom/rise/drop/cut, engine-assigned — never author these),
 and AI motion b-roll (gen_scene_video.py) can carry beats that have no real footage.
+Stock footage (fetch_stock_clip.py, Pexels) is the material backbone for atmosphere
+shots, and every render ends with a cinematic finishing grade (grain + vignette +
+tone; --no-grade to disable) that pulls mixed sources into one color world.
 
 Produce short vertical videos for 抖音 that read like a real person made them. Each beat
 is a designed, kinetic frame voiced by a natural neural voice and auto-synced to it. This
@@ -139,7 +142,15 @@ a deck of styled cards is the failure mode, not a style.
 `{"type":"media","video":"clip.webm","caption":"实录 · 发布会","overlay":{"value":"29/32","label":"小组赛命中"}}`
 (`value` = big accent number; `label`/`text` = one short line under it.)
 
-1. **Page-scroll VIDEO clips (best — real motion, beats any static shot).** One
+0.5. **Stock footage (first choice for atmosphere/setting shots).** Millions of
+   professionally shot portrait HD clips (server rooms, city aerials, labs,
+   factories, crowds, weather...), free commercial license:
+   `python "$SKILL_DIR/scripts/fetch_stock_clip.py" --query "<english keywords>"
+   --out <工作目录>/clipN.mp4` — keywords must be ENGLISH, 2-3 concrete nouns
+   ("data center aisle", "chip factory macro"); `--index 1` picks the next
+   candidate when the first doesn't fit. Event-specific imagery still needs
+   real news footage (fetch_web_clip) — stock covers the LOOK, not the news.
+1. **Page-scroll VIDEO clips (real motion from the actual page).** One
    command, runs in your terminal:
    `python "$SKILL_DIR/scripts/record_page_clip.py" --url <article/repo/product> --out /root/hermes-content/douyin/<dir>/clip1.webm --seconds 6`
    → a slow-scrolling phone-viewport capture of the real page (load lead-in

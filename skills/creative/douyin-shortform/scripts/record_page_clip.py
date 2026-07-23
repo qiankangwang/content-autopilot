@@ -9,7 +9,7 @@ one command:
   python record_page_clip.py --url https://github.com/x/y --out clip1.webm --seconds 6
 
 Options: --no-scroll (static hold), --wait N (settle seconds before recording),
---width/--height (viewport; default 900x1600 portrait, good for 9:16 media).
+--width/--height (viewport; default 1080x1920 portrait, matches the 9:16 canvas 1:1).
 The clip is silent; the video pipeline plays it muted under the narration.
 """
 import argparse
@@ -31,8 +31,8 @@ def main():
     ap.add_argument("--start-y", type=float, default=0.0,
                     help="start recording scrolled this many px down (skip the site header/nav; "
                          "600-900 usually lands on the article body)")
-    ap.add_argument("--width", type=int, default=900)
-    ap.add_argument("--height", type=int, default=1600)
+    ap.add_argument("--width", type=int, default=1080)
+    ap.add_argument("--height", type=int, default=1920)
     args = ap.parse_args()
 
     import subprocess
@@ -98,8 +98,8 @@ def main():
         r = subprocess.run(
             ["ffmpeg", "-y", "-framerate", str(fps),
              "-i", os.path.join(rec_dir, "f%05d.jpg"),
-             "-an", "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8",
-             "-crf", "32", "-b:v", "0", args.out],
+             "-an", "-c:v", "libvpx-vp9", "-deadline", "good", "-cpu-used", "2",
+             "-crf", "26", "-b:v", "0", args.out],
             capture_output=True, text=True,
         )
         if r.returncode != 0 or not os.path.isfile(args.out):

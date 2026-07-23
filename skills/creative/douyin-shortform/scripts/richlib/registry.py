@@ -12,15 +12,18 @@ import os
 import random
 
 from . import base
+from .style_obsidian import ObsidianStyle
 from .style_keynote import KeynoteStyle
 from .style_editorial import EditorialStyle
 from .style_notebook import NotebookStyle
 from .style_terminal import TerminalStyle
 from .style_tabloid import TabloidStyle
 
-# Order = nothing special; weights/affinity decide. Keynote is intentionally
-# low-weight: kept as a rare option, no longer the default look.
+# Order = nothing special; weights/affinity decide. Obsidian (V3 「Dark Matter」)
+# is the flagship default (high weight); the old 5 skins stay selectable as
+# low-weight fallback/rollback options. Keynote stays the rarest.
 STYLES = [
+    ObsidianStyle(),
     EditorialStyle(),
     NotebookStyle(),
     TerminalStyle(),
@@ -67,6 +70,14 @@ def select(spec, rng, out_path="", explicit=None):
     forced = (explicit or spec.get("style") or "").strip().lower()
     if forced in BY_ID:
         return BY_ID[forced], recent
+
+    # V3 「Dark Matter」: obsidian is the single flagship default (replaces the
+    # old 5-skin rotation, DESIGN-V3 §1/§6). The old styles stay on disk for
+    # rollback but are only reachable via an explicit --style/spec['style'];
+    # the weighted anti-repeat draw below is kept as a fallback for the case
+    # where obsidian is ever removed from the registry.
+    if "obsidian" in BY_ID:
+        return BY_ID["obsidian"], recent
 
     scores = {}
     for s in STYLES:

@@ -26,7 +26,7 @@ def main():
     ap.add_argument("--out", required=True, help="output .webm path")
     ap.add_argument("--start", type=float, default=0.0, help="cut start inside the source (s)")
     ap.add_argument("--seconds", type=float, default=8.0, help="clip length (s), keep ≤10")
-    ap.add_argument("--max-height", type=int, default=720)
+    ap.add_argument("--max-height", type=int, default=1080)
     args = ap.parse_args()
 
     tmp = tempfile.mkdtemp(prefix="fetch-")
@@ -92,8 +92,8 @@ def main():
         seek = 1.0 if "--download-sections" in " ".join(cmd) and args.start > 0 else args.start
         r = subprocess.run(
             ["ffmpeg", "-y", "-ss", f"{seek:.2f}", "-i", src, "-t", f"{args.seconds:.2f}",
-             "-an", "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8",
-             "-crf", "33", "-b:v", "0", "-vf", "scale='min(1080,iw)':-2", args.out],
+             "-an", "-c:v", "libvpx-vp9", "-deadline", "good", "-cpu-used", "2",
+             "-crf", "26", "-b:v", "0", "-vf", "scale='min(1080,iw)':-2", args.out],
             capture_output=True, text=True,
         )
         if r.returncode != 0 or not os.path.isfile(args.out):

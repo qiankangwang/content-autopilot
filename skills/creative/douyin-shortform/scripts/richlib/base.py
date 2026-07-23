@@ -170,6 +170,30 @@ def ensure_fonts():
             subprocess.run(["fc-cache", "-f", dst], capture_output=True, timeout=90)
         except Exception:
             pass
+    # ── V3 「Dark Matter」 font contract (additive; never alters the copy above) ─
+    # style_obsidian's H1 needs 得意黑 Smiley Sans (bundled → installed by the
+    # loop above) and body/labels need Noto Sans CJK SC (must already exist in
+    # the render container). Verify both and warn LOUDLY on miss so a silent
+    # sans fallback never ships unnoticed (DESIGN-V3 §1 type contract).
+    import sys
+    try:
+        if not os.path.exists(os.path.join(dst, "SmileySans-Oblique.ttf")):
+            sys.stderr.write(
+                "[fonts] WARN: SmileySans-Oblique.ttf not installed — obsidian H1 "
+                "headlines will fall back to sans (bundle it in assets/fonts).\n")
+    except Exception:
+        pass
+    try:
+        listed = subprocess.run(["fc-list"], capture_output=True, timeout=30)
+        catalog = (listed.stdout or b"").decode("utf-8", "ignore")
+        if not any(k in catalog for k in ("Noto Sans CJK", "Source Han Sans", "思源黑体")):
+            sys.stderr.write(
+                "[fonts] WARN: no Noto Sans CJK / Source Han Sans found in the "
+                "render container — CJK body/labels/subtitles may tofu. Install "
+                "fonts-noto-cjk before rendering obsidian.\n")
+    except Exception:
+        # fc-list unavailable → can't verify; stay silent rather than false-alarm
+        pass
 
 
 # ── the Style base class ─────────────────────────────────────────────────────

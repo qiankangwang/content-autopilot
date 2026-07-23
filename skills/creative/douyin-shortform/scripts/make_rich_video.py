@@ -79,7 +79,11 @@ _CTA_RE = re.compile(
 
 # text-punch card types: fine as seasoning, deadly as the main course. media +
 # diagram are the "visual" types; everything else reads as a slide.
-_TEXT_CARD_TYPES = {"hook", "stat", "compare", "bullets", "code", "outro"}
+_TEXT_CARD_TYPES = {"hook", "bullets", "code", "outro", "kinetic"}
+# V3: `evidence` (framed screenshot/article card) counts as REAL visual material;
+# `kinetic` (big animated type) is still a text card for adjacency discipline;
+# `stat`/`compare` moved OUT of the text-card set — under obsidian they are
+# motion data-viz (hero roll-up digits / animated bars), same class as diagram.
 
 
 def _norm_say(s):
@@ -138,7 +142,7 @@ def validate_spec(spec):
 
     # 4. visual coverage: real material must carry the video
     n = len(scenes)
-    media_ok = sum(1 for sc in scenes if sc.get("type") == "media" and (
+    media_ok = sum(1 for sc in scenes if sc.get("type") in ("media", "evidence") and (
         os.path.isfile(str(sc.get("image", ""))) or os.path.isfile(str(sc.get("video", "")))))
     need = max(2, (n * 3 + 9) // 10)     # ceil(0.3n), floor 2
     if media_ok < need:
@@ -170,6 +174,29 @@ def validate_spec(spec):
             f"AI 动态空镜用了 {len(ai_vid)} 段(scene {ai_vid}),全片上限 4 段(推荐 2-3)。"
             f"多出来的换成真实素材(fetch_web_clip / record_page_clip / browser_screenshot)——"
             f"真实素材永远优先,AI 空镜只补没有实拍的抽象/机制段落。")
+
+    # 6. V3 grammar: diagram ≤4 nodes with tight labels (the 6-node whiteboard
+    # was the single most-criticized "PPT" frame); text cards stay 2-line terse.
+    for i, sc in enumerate(scenes):
+        if sc.get("type") == "diagram":
+            nodes = sc.get("nodes") or []
+            if len(nodes) > 4:
+                problems.append(
+                    f"scene {i} 的 diagram 有 {len(nodes)} 个节点,V3 上限 4 个。"
+                    f"把机制压缩成≤4步,砍掉的信息挪进口播或拆成 stat/compare 场景。")
+            for nd in nodes:
+                if len(str(nd.get("label", ""))) > 10 or len(str(nd.get("sub", ""))) > 14:
+                    problems.append(
+                        f"scene {i} 的 diagram 节点文字过长(label≤10字/sub≤14字):"
+                        f"「{str(nd.get('label'))[:12]}…」。节点是路标不是段落。")
+                    break
+        if sc.get("type") in ("hook", "outro", "kinetic"):
+            for ln in (sc.get("lines") or []):
+                if len(str(ln)) > 12:
+                    problems.append(
+                        f"scene {i} 的大字行「{str(ln)[:14]}…」超过 12 字——大字要在 0.5 秒内被读完。"
+                        f"拆短或删词。")
+                    break
 
     if problems:
         lines = ["", "[rich] ❌ spec 校验不通过,拒绝出片。按下面逐条修完 spec.json 再重跑同一条命令:"]
@@ -258,6 +285,43 @@ def _sentences(say):
     return sents
 
 
+def _dwell_need(sc):
+    """Minimum on-screen seconds for a viewer to actually READ the scene.
+    User feedback 2026-07-24: cards flipped away mid-read — scene length was
+    purely voiceover length, so a short spoken line under a dense card starved
+    the eyes. Budget: ~4.5 chars/s on big type + per-type orientation beats.
+    The scene is EXTENDED with trailing silence (BGM keeps breathing, captions
+    already gone) — which also breaks the conveyor-belt uniform beat."""
+    t = sc.get("type")
+
+    def chars(*fields):
+        n = 0
+        for f in fields:
+            v = sc.get(f)
+            if isinstance(v, list):
+                n += sum(len(str(x)) for x in v)
+            elif isinstance(v, dict):
+                n += sum(len(str(x)) for x in v.values())
+            elif v:
+                n += len(str(v))
+        return n
+
+    if t in ("hook", "kinetic", "outro"):
+        return 0.9 + chars("lines", "eyebrow", "sub") / 4.5
+    if t == "stat":
+        return 1.6 + chars("value", "unit", "label") / 4.5   # roll-up + read
+    if t == "diagram":
+        nodes = sc.get("nodes") or []
+        # labels are read (≈5 chars/s); subs are small annotations, skimmed
+        lch = sum(len(str(n.get("label", ""))) for n in nodes if isinstance(n, dict))
+        return 1.0 + 0.45 * len(nodes) + lch / 5.0
+    if t == "compare":
+        return 1.4 + chars("before", "after", "a", "b") / 5.0
+    if t == "evidence":
+        return 2.6 + chars("caption", "source") / 5.0
+    return 0.0
+
+
 def build_audio(scenes, workdir, voice, speed, provider="volc", fish_model="s1"):
     """SENTENCE-level synthesis with PROSODY — one flat TTS read per scene was
     the biggest "很AI" tell, but per-subtitle-chunk takes (the previous fix)
@@ -333,6 +397,14 @@ def build_audio(scenes, workdir, voice, speed, provider="volc", fish_model="s1")
                 t += gap
         parts.append(silence_file(PAD))
         t += PAD
+        # reading-time floor: hold the scene until its on-screen text is
+        # readable; capped so one dense card can't stall the whole cut
+        need = _dwell_need(sc)
+        if t < need:
+            extra = round(min(need - t, 3.5), 2)
+            if extra >= 0.1:
+                parts.append(silence_file(extra))
+                t += extra
         durs.append(round(t, 3))
         timings.append(sc_timings)
     listf = os.path.join(workdir, "_concat.txt")
@@ -492,7 +564,7 @@ def prepare_clips(spec, workdir):
     files over the Docker file-sharing channel was implicated in the 2026-07-15
     render crash cascade. Local reads take the whole variable off the table."""
     for i, sc in enumerate(spec.get("scenes", [])):
-        if sc.get("type") == "media" and sc.get("image"):
+        if sc.get("type") in ("media", "evidence", "hook", "kinetic", "outro") and sc.get("image"):
             src = str(sc["image"])
             if os.path.isfile(src):
                 local = os.path.join(workdir, f"_img{i}" + os.path.splitext(src)[1])
@@ -502,7 +574,9 @@ def prepare_clips(spec, workdir):
                 except OSError:
                     pass    # fall back to reading in place
     for i, sc in enumerate(spec.get("scenes", [])):
-        if sc.get("type") != "media" or not sc.get("video"):
+        # V3: hook/kinetic/outro may carry a full-bleed backdrop video — it goes
+        # through the same webm normalization as media clips (chromium/h264).
+        if sc.get("type") not in ("media", "hook", "kinetic", "outro") or not sc.get("video"):
             continue
         src = str(sc["video"])
         if not os.path.isfile(src):
@@ -510,9 +584,12 @@ def prepare_clips(spec, workdir):
         clip = src
         if not src.lower().endswith(".webm"):
             clip = os.path.join(workdir, f"_clip{i}.webm")
+            # quality deadline, not realtime: this intermediate vp9 is re-rasterized
+            # by chromium and encoded once more — a crf34/realtime pass here was a
+            # visible generation loss on every media scene (V3 quality chain).
             r = subprocess.run(
                 ["ffmpeg", "-y", "-i", src, "-an", "-c:v", "libvpx-vp9",
-                 "-deadline", "realtime", "-cpu-used", "8", "-crf", "34", "-b:v", "0",
+                 "-deadline", "good", "-cpu-used", "2", "-crf", "24", "-b:v", "0",
                  "-vf", "scale='min(1080,iw)':-2", clip],
                 capture_output=True, text=True,
             )
@@ -707,16 +784,19 @@ def build_html(spec, durs, out_path="", explicit_style=None, timings=None):
     parts = []
     for i, sc in enumerate(scenes):
         d_i = durs[i] if i < len(durs) else 8.0
-        if sc.get("type") == "diagram":
+        if sc.get("type") == "diagram" and "diagram" not in getattr(style, "OWN_TYPES", ()):
             parts.append(base.diagram_scene(i, sc, ctx, d_i))
             continue
         if sc.get("type") == "media":
             vid = str(sc.get("video", ""))
             img = str(sc.get("image", ""))
+            # V3: a style may bring its own media treatment (scanlines, low-res
+            # containment on blur-fill, …); base full-bleed remains the default.
+            media_fn = getattr(style, "media_scene", None) or base.media_scene
             if vid and os.path.isfile(vid):
-                parts.append(base.media_scene(i, sc, ctx, "kb0", d_i,
-                                              fit=bool(sc.get("_fit")),
-                                              aspect=sc.get("_aspect")))
+                parts.append(media_fn(i, sc, ctx, "kb0", d_i,
+                                      fit=bool(sc.get("_fit")),
+                                      aspect=sc.get("_aspect")))
                 continue
             if img and os.path.isfile(img):
                 fit, aspect = False, None
@@ -729,7 +809,7 @@ def build_html(spec, durs, out_path="", explicit_style=None, timings=None):
                 except Exception:
                     pass
                 kb = rng.choice(["kb0", "kb1", "kb2", "kb3"])
-                parts.append(base.media_scene(i, sc, ctx, kb, d_i, fit=fit, aspect=aspect))
+                parts.append(media_fn(i, sc, ctx, kb, d_i, fit=fit, aspect=aspect))
                 continue
             sys.stderr.write(f"[rich] media scene {i}: no usable image/video — "
                              "falling back to a text card\n")
@@ -737,15 +817,18 @@ def build_html(spec, durs, out_path="", explicit_style=None, timings=None):
                       lines=sc.get("lines") or [str(sc.get("caption") or "")[:12] or "…"])
         parts.append(style.scene(i, sc, ctx))
     # entry transitions (anti-slideshow): every scene except the cover gets a
-    # varied entry move; never the same one twice in a row, hard cuts stay rare
-    _TRS = ["tr-rise", "tr-slidel", "tr-slider", "tr-zoom", "tr-drop", ""]
-    last_tr = None
-    for i in range(1, len(parts)):
-        pool = [t for t in _TRS if t != last_tr]
-        tr = rng.choice(pool)
-        last_tr = tr
-        if tr:
-            parts[i] = parts[i].replace('class="scene', f'class="scene {tr}', 1)
+    # varied entry move; never the same one twice in a row, hard cuts stay rare.
+    # V3 styles that define their own motion language (obsidian: hard cuts +
+    # in-scene blur-focus entrances) opt out via style.own_transitions.
+    if not getattr(style, "own_transitions", False):
+        _TRS = ["tr-rise", "tr-slidel", "tr-slider", "tr-zoom", "tr-drop", ""]
+        last_tr = None
+        for i in range(1, len(parts)):
+            pool = [t for t in _TRS if t != last_tr]
+            tr = rng.choice(pool)
+            last_tr = tr
+            if tr:
+                parts[i] = parts[i].replace('class="scene', f'class="scene {tr}', 1)
     scenes_html = "\n".join(parts)
     subs_html = base.build_subs_html(scenes, durs, ctx["accent"], timings=timings, pad=PAD) \
         if not spec.get("no_subs") else ""
@@ -829,7 +912,14 @@ def _record_frames_once(html_path, durs, fps, workdir):
         browser = p.chromium.launch(channel="chromium",
                                     args=["--no-sandbox", "--disable-dev-shm-usage",
                                           "--disable-gpu"])
-        page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+        # Supersampled render + ffmpeg lanczos downscale to 1080p: text/vector
+        # edges come out clean instead of 1x-antialiased (V3 quality chain).
+        # Default 1.5 (1620x2880): DPR 2 crashed full chromium in this container
+        # (2026-07-24, "Target crashed" — the 512M /tmp tmpfs takes chromium's
+        # shm under --disable-dev-shm-usage and 4x buffers overflow it). Set
+        # RICH_DPR=2 only on roomier hardware; RICH_DPR=1 = old behavior.
+        dpr = float(os.environ.get("RICH_DPR", "1.5"))
+        page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=dpr)
         page.goto("file://" + html_path + "#manual")
         page.wait_for_timeout(600)          # fonts/layout settle (wall clock, pre-timeline)
         try:                                # let clip metadata/first frames decode
@@ -849,11 +939,11 @@ def _record_frames_once(html_path, durs, fps, workdir):
             # video clips don't follow the animation clock — seek to scene-local t
             local_t = (f - scene_start_f) / fps
             page.evaluate("window.__seekVideos(%d, %f)" % (cur_scene, local_t))
-            # JPEG q90: ~5-8x smaller than PNG per frame. A 40s video is ~1200
-            # frames — PNG frames ballooned the WSL disk (which only ever
-            # grows) and helped fill the host drive.
-            page.screenshot(path=os.path.join(frames_dir, "f%05d.jpg" % f),
-                            type="jpeg", quality=90)
+            # PNG (lossless): the old JPEG-q90-per-frame pass dragged every
+            # gradient/text edge through lossy compression before x264 even ran.
+            # Frames live under /var/cache (overlay, ~1TB) so the 2026-07-15
+            # disk concern no longer applies; the workdir is rm -rf'd after mux.
+            page.screenshot(path=os.path.join(frames_dir, "f%05d.png" % f))
         browser.close()
     return frames_dir, n
 
@@ -871,7 +961,7 @@ def main():
     ap.add_argument("--spec", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--style", default=None,
-                    help="force a style: editorial|notebook|terminal|tabloid|keynote (default: rotate)")
+                    help="force a style: obsidian (V3 default) | editorial|notebook|terminal|tabloid|keynote (legacy)")
     ap.add_argument("--voice", default=DEFAULT_VOICE,
                     help="volc voice_type, OR Fish Audio reference_id when --tts fish")
     ap.add_argument("--tts", choices=["volc", "fish"], default="volc")
@@ -951,27 +1041,29 @@ def main():
     # cover = the settled hook frame (frame-exact, no recorder garbage to hide)
     cover_t = max(0.4, min(1.0, (durs[0] - 0.2) if durs else 1.0))
     cover_idx = min(int(cover_t * args.fps), max(nframes - 1, 0))
-    cover_png = os.path.join(frames_dir, "f%05d.jpg" % cover_idx)
+    cover_png = os.path.join(frames_dir, "f%05d.png" % cover_idx)
     have_cover = os.path.exists(cover_png)
 
     cmd = ["ffmpeg", "-y", "-framerate", str(args.fps),
-           "-i", os.path.join(frames_dir, "f%05d.jpg")]
+           "-i", os.path.join(frames_dir, "f%05d.png")]
     if voice_mp3:
+        # 44.1k stereo out: the TTS source is 24k mono, but pinning the mux to
+        # it flattened the (stereo) BGM too. Upmix the bus instead.
         cmd += ["-i", voice_mp3, "-map", "0:v", "-map", "1:a",
-                "-c:a", "aac", "-b:a", "192k", "-shortest"]
+                "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2", "-shortest"]
     else:
         cmd += ["-map", "0:v", "-an"]
-    # cinematic finishing grade (2026-07-22): subtle film grain + soft vignette
-    # + a light teal-orange tone pulls mixed sources (recordings, screenshots,
-    # stock, AI clips) into ONE color world — the patchwork feel was a big part
-    # of "not quite professional". Kept subtle on purpose; --no-grade to A/B.
+    # V3 finishing: a light contrast/tone trim only. The film grain + vignette
+    # of the 07-22 "cinematic" pass actively fought clarity (grain eats bitrate
+    # and fuzzes text) — precision look wants clean pixels. --no-grade to A/B.
     grade = ("" if args.no_grade else
-             ",eq=contrast=1.03:saturation=1.05"
-             ",colorbalance=rs=.025:bs=-.02:rh=-.02:bh=.025"
-             ",vignette=angle=PI/6"
-             ",noise=alls=5:allf=t+u")
-    cmd += ["-vf", f"scale={W}:{H}{grade},format=yuv420p",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "19", args.out]
+             ",eq=contrast=1.02:saturation=1.04"
+             ",colorbalance=rs=.015:bs=-.012")
+    # lanczos downscale from the DPR-2 frames is where the sharpness win lands;
+    # crf17/slow + maxrate keeps douyin's ≥8Mbps upload guidance honest.
+    cmd += ["-vf", f"scale={W}:{H}:flags=lanczos{grade},format=yuv420p",
+            "-c:v", "libx264", "-preset", "slow", "-crf", "17",
+            "-maxrate", "12M", "-bufsize", "24M", args.out]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         sys.stderr.write("[rich] ffmpeg failed:\n" + r.stderr[-1200:] + "\n")

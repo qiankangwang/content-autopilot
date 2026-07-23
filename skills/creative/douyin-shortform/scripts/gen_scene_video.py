@@ -50,7 +50,8 @@ def _strip_watermark(path, frac=0.058):
     r = subprocess.run(
         ["ffmpeg", "-y", "-v", "error", "-i", path,
          "-vf", f"crop=iw:trunc((ih*(1-{frac}))/2)*2:0:0",
-         "-c:v", "libx264", "-preset", "fast", "-crf", "19", "-an", tmp],
+         "-r", "30",   # CogVideoX emits 37fps; normalize so downstream sync is exact
+         "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-an", tmp],
         capture_output=True, text=True)
     if r.returncode == 0 and os.path.isfile(tmp) and os.path.getsize(tmp) > 10240:
         os.replace(tmp, path)
@@ -87,7 +88,7 @@ def main():
     ap.add_argument("--out", required=True, help="output .mp4 path")
     ap.add_argument("--model", default="cogvideox-flash",
                     help="cogvideox-flash(免费) | 更高档模型按 bigmodel 文档")
-    ap.add_argument("--size", default="768x1344", help="vertical; auto-dropped if rejected")
+    ap.add_argument("--size", default="1080x1920", help="vertical; auto-dropped if rejected (flash tier confirmed OK 2026-07-24)")
     ap.add_argument("--poll-timeout", type=int, default=480)
     args = ap.parse_args()
 
